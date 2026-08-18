@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --background: #F7F9FB;
+  --foreground: #0F1923;
+  --card: #FFFFFF;
+  --card-foreground: #0F1923;
+  --primary: #5AC361;
+  --primary-dark: #3EA646;
+  --primary-foreground: #FFFFFF;
+  --primary-muted: #EBF8EC;
+  --secondary: #F0F4F8;
+  --secondary-foreground: #374151;
+  --muted: #F0F4F8;
+  --muted-foreground: #6B7280;
+  --accent: #5AC361;
+  --accent-foreground: #FFFFFF;
+  --border: #E5EAF0;
+  --border-strong: #CBD5E1;
+  --ring: #5AC361;
+  --radius: 12px;
+
+  --status-verified: #5AC361;
+  --status-verified-bg: #EBF8EC;
+  --status-pending: #F59E0B;
+  --status-pending-bg: #FFFBEB;
+  --status-rejected: #EF4444;
+  --status-rejected-bg: #FEF2F2;
+  --status-discussion: #3B82F6;
+  --status-discussion-bg: #EFF6FF;
+  --status-active: #5AC361;
+  --status-active-bg: #EBF8EC;
+  --status-open: #8B5CF6;
+  --status-open-bg: #F5F3FF;
+  --status-closed: #6B7280;
+  --status-closed-bg: #F3F4F6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  opacity: 0;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
