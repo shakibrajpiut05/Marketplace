@@ -17,6 +17,9 @@ import requestRoutes from "./routes/request.routes.js";
 import dealRoutes from "./routes/deal.routes.js";
 import requirementRoutes from "./routes/requirement.routes.js";
 import matchingRoutes from "./routes/matching.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
+import activityLogRoutes from "./routes/activityLog.routes.js";
+import reportRoutes from "./routes/report.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,7 +46,7 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 
 /*
@@ -76,12 +79,7 @@ app.use(morgan("dev"));
 | Routes
 |--------------------------------------------------------------------------
 */
-app.use(
-  "/uploads",
-  express.static(
-    path.join(__dirname, "../uploads")
-  )
-);
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use("/api/requests", requestRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -89,8 +87,11 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/listings", listingRoutes);
 app.use("/api/deals", dealRoutes);
-app.use("/api/requirements",requirementRoutes);
-app.use("/api/matching",matchingRoutes);
+app.use("/api/requirements", requirementRoutes);
+app.use("/api/matching", matchingRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/activity-logs", activityLogRoutes);
+app.use("/api/reports", reportRoutes);
 
 /*
 |--------------------------------------------------------------------------

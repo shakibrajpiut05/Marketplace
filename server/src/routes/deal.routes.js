@@ -14,6 +14,7 @@ import {
   updateDealStatus,
   getSellerDeals,
   getBuyerDeals,
+  createDealsFromRequirement
 } from "../controllers/deal.controller.js";
 
 const router = express.Router();
@@ -51,6 +52,13 @@ router.get(
   protect,
   authorize("buyer"),
   getBuyerDeals
+);
+
+router.post(
+  "/from-requirement",
+  protect,
+  authorize("admin"),
+  createDealsFromRequirement
 );
 
 export default router;

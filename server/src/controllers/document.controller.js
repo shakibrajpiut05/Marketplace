@@ -2,6 +2,7 @@ import path from "path";
 
 import Document from "../models/Document.js";
 import User from "../models/User.js";
+import { createActivityLog } from "../services/activityLog.service.js";
 
 export const uploadKycDocument = async (req, res) => {
   try {
@@ -61,7 +62,6 @@ export const uploadKycDocument = async (req, res) => {
     });
   }
 };
-
 
 /*
 |--------------------------------------------------------------------------
@@ -157,6 +157,12 @@ export const reviewKycDocument = async (
       });
     }
 
+    const previousStatus =
+      document.verificationStatus;
+
+    const previousRejectionReason =
+      document.rejectionReason || "";
+
     document.verificationStatus = status;
 
     document.rejectionReason =
@@ -177,6 +183,9 @@ export const reviewKycDocument = async (
 
     const userId = document.owner;
 
+    let userKycStatusAfter = null;
+    let userVerifiedBadgeAfter = null;
+
     if (status === "approved") {
       const rejectedDocuments =
         await Document.countDocuments({
@@ -185,25 +194,65 @@ export const reviewKycDocument = async (
         });
 
       if (rejectedDocuments === 0) {
+        const updatedUser =
+          await User.findByIdAndUpdate(
+            userId,
+            {
+              kycStatus: "approved",
+              verifiedBadge: true,
+            },
+            { new: true }
+          ).select("kycStatus verifiedBadge");
+
+        userKycStatusAfter =
+          updatedUser?.kycStatus || "approved";
+
+        userVerifiedBadgeAfter =
+          Boolean(updatedUser?.verifiedBadge);
+      }
+    } else {
+      const updatedUser =
         await User.findByIdAndUpdate(
           userId,
           {
-            kycStatus: "approved",
-            verifiedBadge: true,
+            kycStatus: "rejected",
+            verifiedBadge: false,
           },
           { new: true }
-        );
-      }
-    } else {
-      await User.findByIdAndUpdate(
-        userId,
-        {
-          kycStatus: "rejected",
-          verifiedBadge: false,
-        },
-        { new: true }
-      );
+        ).select("kycStatus verifiedBadge");
+
+      userKycStatusAfter =
+        updatedUser?.kycStatus || "rejected";
+
+      userVerifiedBadgeAfter =
+        Boolean(updatedUser?.verifiedBadge);
     }
+
+    await createActivityLog({
+      actorId: req.user._id,
+      action:
+        status === "approved"
+          ? "kyc_approved"
+          : "kyc_rejected",
+      entityType: "kyc_document",
+      entityId: document._id,
+      before: {
+        verificationStatus: previousStatus,
+        rejectionReason: previousRejectionReason,
+      },
+      after: {
+        verificationStatus: document.verificationStatus,
+        rejectionReason:
+          document.rejectionReason || "",
+        userKycStatus: userKycStatusAfter,
+        userVerifiedBadge: userVerifiedBadgeAfter,
+      },
+      metadata: {
+        ownerId: document.owner,
+        documentType: document.type,
+        fileName: document.fileName,
+      },
+    });
 
     return res.status(200).json({
       success: true,

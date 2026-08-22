@@ -1,8 +1,843 @@
+import mongoose from "mongoose";
 import SellerListing from "../models/SellerListing.js";
 import Document from "../models/Document.js";
+import { createActivityLog } from "../services/activityLog.service.js";
+
+/*
+
+Credit category normalization
+
+--------------------------------------------------------------------------
+
+*/
+
+const categoryMap = {
+  plastic: "Plastic",
+  battery: "Battery",
+  "e-waste": "E-Waste",
+  "e waste": "E-Waste",
+  elv: "ELV",
+  "used oil": "Used Oil",
+  tyre: "Tyre",
+};
+
+/*
+
+Create seller listing
+
+--------------------------------------------------------------------------
+
+*/
 
 export const createListing = async (req, res) => {
+try {
+const {
+category,
+quantity,
+price,
+location,
+complianceYear,
+validTill,
+description,
+} = req.body || {};
+
+/*
+|--------------------------------------------------------------------------
+| Normalize credit category
+|--------------------------------------------------------------------------
+*/
+
+const normalizedCategory =
+  categoryMap[
+    category?.trim().toLowerCase()
+  ];
+
+if (!normalizedCategory) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Invalid credit type. Allowed types: Battery, Plastic, E-Waste, ELV, Used Oil, Tyre",
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| Seller authorization
+|--------------------------------------------------------------------------
+*/
+
+if (req.user.role !== "seller") {
+  return res.status(403).json({
+    success: false,
+    message:
+      "Only sellers can create listings",
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| KYC check
+|--------------------------------------------------------------------------
+*/
+
+if (
+  req.user.kycStatus !==
+  "approved"
+) {
+  return res.status(403).json({
+    success: false,
+    message:
+      "Your KYC must be approved before creating a listing",
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| Required fields
+|--------------------------------------------------------------------------
+*/
+
+if (
+  !quantity ||
+  !price ||
+  !location ||
+  !complianceYear ||
+  !validTill
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Quantity, price, location, compliance year and valid till are required",
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| Proof document
+|--------------------------------------------------------------------------
+*/
+
+if (!req.file) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Proof document is required",
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| Parse values
+|--------------------------------------------------------------------------
+*/
+
+const parsedQuantity =
+  Number(quantity);
+
+const parsedPrice =
+  Number(price);
+
+const parsedValidTill =
+  new Date(validTill);
+
+if (
+  !Number.isFinite(
+    parsedQuantity
+  ) ||
+  parsedQuantity <= 0
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Quantity must be a valid positive number",
+  });
+}
+
+if (
+  !Number.isFinite(
+    parsedPrice
+  ) ||
+  parsedPrice <= 0
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Price must be a valid positive number",
+  });
+}
+
+if (
+  Number.isNaN(
+    parsedValidTill.getTime()
+  )
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Valid till must be a valid date",
+  });
+}
+
+if (
+  parsedValidTill < new Date()
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Valid till date must be in the future",
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| Create proof document
+|--------------------------------------------------------------------------
+*/
+
+const document =
+  await Document.create({
+    owner: req.user._id,
+    type: "epr_certificate",
+    fileName:
+      req.file.originalname,
+    fileUrl: `/uploads/documents/${req.file.filename}`,
+    mimeType:
+      req.file.mimetype,
+    fileSize:
+      req.file.size,
+    verificationStatus:
+      "pending",
+  });
+
+/*
+|--------------------------------------------------------------------------
+| Create seller listing
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| Use normalizedCategory here.
+|--------------------------------------------------------------------------
+*/
+
+const listing =
+  await SellerListing.create({
+    sellerId:
+      req.user._id,
+
+    category:
+      normalizedCategory,
+
+    totalQuantity:
+      parsedQuantity,
+
+    quantity:
+      parsedQuantity,
+
+    reservedQuantity: 0,
+
+    price:
+      parsedPrice,
+
+    location:
+      location.trim(),
+
+    complianceYear:
+      complianceYear.trim(),
+
+    validTill:
+      parsedValidTill,
+
+    description:
+      description?.trim() ||
+      "",
+
+    documentId:
+      document._id,
+
+    status:
+      "pending_review",
+  });
+
+return res.status(201).json({
+  success: true,
+  message:
+    "Listing submitted successfully for verification",
+  listing,
+});
+
+} catch (error) {
+console.error(
+"Create listing error:",
+error
+);
+
+return res.status(500).json({
+  success: false,
+  message:
+    "Failed to create listing",
+});
+
+}
+};
+
+/*
+
+Get pending seller listings
+
+--------------------------------------------------------------------------
+
+*/
+
+export const getPendingListings = async (
+req,
+res
+) => {
+try {
+const listings =
+await SellerListing.find({
+status: "pending_review",
+})
+.populate(
+"sellerId",
+"name company email phone role kycStatus verifiedBadge"
+)
+.populate(
+"documentId",
+"fileName fileUrl mimeType fileSize verificationStatus createdAt"
+)
+.sort({
+createdAt: -1,
+});
+
+return res.status(200).json({
+  success: true,
+  count: listings.length,
+  listings,
+});
+
+} catch (error) {
+console.error(
+"Get pending listings error:",
+error
+);
+
+return res.status(500).json({
+  success: false,
+  message:
+    "Failed to fetch pending listings",
+});
+
+}
+};
+
+/*
+
+Approve / reject seller listing
+
+--------------------------------------------------------------------------
+
+*/
+
+export const reviewListing = async (
+req,
+res
+) => {
+try {
+const {
+listingId,
+} = req.params;
+
+const {
+  status,
+  rejectionReason,
+} = req.body || {};
+
+if (
+  !["active", "rejected"].includes(
+    status
+  )
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Status must be active or rejected",
+  });
+}
+
+if (
+  status === "rejected" &&
+  !rejectionReason?.trim()
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Rejection reason is required",
+  });
+}
+
+const listing =
+  await SellerListing.findById(
+    listingId
+  );
+
+if (!listing) {
+  return res.status(404).json({
+    success: false,
+    message:
+      "Listing not found",
+  });
+}
+
+if (
+  listing.status !==
+  "pending_review"
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "This listing has already been reviewed",
+  });
+}
+
+const previousStatus = listing.status;
+const previousRejectionReason =
+  listing.rejectionReason || "";
+
+/*
+|--------------------------------------------------------------------------
+| Prevent publishing an expired listing
+|--------------------------------------------------------------------------
+*/
+
+if (
+  status === "active" &&
+  listing.validTill < new Date()
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Expired listings cannot be approved",
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| Prevent publishing a zero quantity listing
+|--------------------------------------------------------------------------
+*/
+
+if (
+  status === "active" &&
+  Number(listing.quantity) <= 0
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "A listing must have quantity greater than zero before approval",
+  });
+}
+
+listing.status = status;
+
+listing.rejectionReason =
+  status === "rejected"
+    ? rejectionReason.trim()
+    : "";
+
+listing.approvedBy =
+  req.user._id;
+
+listing.approvedAt =
+  new Date();
+
+await listing.save();
+
+/*
+|--------------------------------------------------------------------------
+| Update proof document
+|--------------------------------------------------------------------------
+*/
+
+const document =
+  await Document.findById(
+    listing.documentId
+  );
+
+if (document) {
+  document.verificationStatus =
+    status === "active"
+      ? "approved"
+      : "rejected";
+
+  document.rejectionReason =
+    status === "rejected"
+      ? rejectionReason.trim()
+      : "";
+
+  document.verifiedBy =
+    req.user._id;
+
+  document.verifiedAt =
+    new Date();
+
+  await document.save();
+}
+
+await createActivityLog({
+  actorId: req.user._id,
+  action:
+    status === "active"
+      ? "listing_approved"
+      : "listing_rejected",
+  entityType: "seller_listing",
+  entityId: listing._id,
+  before: {
+    status: previousStatus,
+    rejectionReason: previousRejectionReason,
+  },
+  after: {
+    status: listing.status,
+    rejectionReason:
+      listing.rejectionReason || "",
+    approvedBy: listing.approvedBy,
+    approvedAt: listing.approvedAt,
+  },
+  metadata: {
+    sellerId: listing.sellerId,
+    category: listing.category,
+    quantity: listing.quantity,
+    price: listing.price,
+    location: listing.location,
+    complianceYear: listing.complianceYear,
+  },
+});
+
+return res.status(200).json({
+  success: true,
+  message:
+    status === "active"
+      ? "Listing approved successfully"
+      : "Listing rejected successfully",
+  listing,
+});
+
+} catch (error) {
+console.error(
+"Review listing error:",
+error
+);
+
+return res.status(500).json({
+  success: false,
+  message:
+    "Failed to review listing",
+});
+
+}
+};
+
+/*
+
+Get active marketplace listings
+
+--------------------------------------------------------------------------
+
+
+
+Only listings that are:
+
+- active
+
+- quantity > 0
+
+- not expired
+
+
+
+are visible to buyers.
+
+--------------------------------------------------------------------------
+
+*/
+
+export const getActiveListings = async (
+req,
+res
+) => {
+try {
+const {
+category,
+location,
+complianceYear,
+sort = "newest",
+} = req.query;
+
+const filter = {
+  status: "active",
+
+  quantity: {
+    $gt: 0,
+  },
+
+  validTill: {
+    $gte: new Date(),
+  },
+};
+
+if (category) {
+  filter.category = category;
+}
+
+if (location) {
+  filter.location = location;
+}
+
+if (complianceYear) {
+  filter.complianceYear =
+    complianceYear;
+}
+
+let query =
+  SellerListing.find(filter)
+    .populate(
+      "sellerId",
+      "name company verifiedBadge"
+    )
+    .populate(
+      "documentId",
+      "fileName fileUrl verificationStatus"
+    );
+
+switch (sort) {
+  case "price-asc":
+    query = query.sort({
+      price: 1,
+    });
+    break;
+
+  case "price-desc":
+    query = query.sort({
+      price: -1,
+    });
+    break;
+
+  case "qty-desc":
+    query = query.sort({
+      quantity: -1,
+    });
+    break;
+
+  case "newest":
+  default:
+    query = query.sort({
+      createdAt: -1,
+    });
+    break;
+}
+
+const listings =
+  await query;
+
+return res.status(200).json({
+  success: true,
+  count: listings.length,
+  listings,
+});
+
+} catch (error) {
+console.error(
+"Get active listings error:",
+error
+);
+
+return res.status(500).json({
+  success: false,
+  message:
+    "Failed to fetch marketplace listings",
+});
+
+}
+};
+
+/*
+
+Get listing by ID
+
+--------------------------------------------------------------------------
+
+
+
+Buyer can only access a listing when it is:
+
+- active
+
+- quantity > 0
+
+- not expired
+
+--------------------------------------------------------------------------
+
+*/
+
+export const getListingById = async (
+req,
+res
+) => {
+try {
+const {
+listingId,
+} = req.params;
+
+const listing =
+  await SellerListing.findOne({
+    _id: listingId,
+
+    status: "active",
+
+    quantity: {
+      $gt: 0,
+    },
+
+    validTill: {
+      $gte: new Date(),
+    },
+  })
+    .populate(
+      "sellerId",
+      "name company verifiedBadge"
+    )
+    .populate(
+      "documentId",
+      "fileName fileUrl mimeType verificationStatus"
+    );
+
+if (!listing) {
+  return res.status(404).json({
+    success: false,
+    message:
+      "Listing not found or no longer available",
+  });
+}
+
+return res.status(200).json({
+  success: true,
+  listing,
+});
+
+} catch (error) {
+console.error(
+"Get listing by ID error:",
+error
+);
+
+return res.status(500).json({
+  success: false,
+  message:
+    "Failed to fetch listing",
+});
+
+}
+};
+
+/*
+
+Get listings belonging to logged-in seller
+
+--------------------------------------------------------------------------
+
+
+
+Seller can see all of their own listings,
+
+including pending, active, rejected, expired,
+
+and sold listings.
+
+--------------------------------------------------------------------------
+
+*/
+
+export const getSellerListings = async (
+req,
+res
+) => {
+try {
+const listings =
+await SellerListing.find({
+sellerId:
+req.user._id,
+})
+.populate(
+"documentId",
+"fileName fileUrl verificationStatus rejectionReason"
+)
+.sort({
+createdAt: -1,
+});
+
+return res.status(200).json({
+  success: true,
+  count: listings.length,
+  listings,
+});
+
+} catch (error) {
+console.error(
+"Get seller listings error:",
+error
+);
+
+return res.status(500).json({
+  success: false,
+  message:
+    "Failed to fetch seller listings",
+});
+
+}
+};
+
+/*
+|--------------------------------------------------------------------------
+| Update seller listing
+|--------------------------------------------------------------------------
+|
+| Sellers can edit active/paused listings.
+| Quantity can only be edited before any inventory has been reserved or
+| consumed, so historical deal quantities remain consistent.
+|--------------------------------------------------------------------------
+*/
+
+export const updateSellerListing = async (req, res) => {
   try {
+    const { listingId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(listingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid listingId",
+      });
+    }
+
+    const listing = await SellerListing.findOne({
+      _id: listingId,
+      sellerId: req.user._id,
+    });
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: "Listing not found",
+      });
+    }
+
+    if (!["active", "paused"].includes(listing.status)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only active or paused listings can be edited",
+      });
+    }
+
     const {
       category,
       quantity,
@@ -13,196 +848,203 @@ export const createListing = async (req, res) => {
       description,
     } = req.body || {};
 
-    if (req.user.role !== "seller") {
-      return res.status(403).json({
-        success: false,
-        message: "Only sellers can create listings",
-      });
+    const previous = {
+      category: listing.category,
+      quantity: listing.quantity,
+      totalQuantity: listing.totalQuantity,
+      reservedQuantity: listing.reservedQuantity,
+      price: listing.price,
+      location: listing.location,
+      complianceYear: listing.complianceYear,
+      validTill: listing.validTill,
+      description: listing.description,
+      status: listing.status,
+    };
+
+    if (category !== undefined) {
+      const categoryMap = {
+        plastic: "Plastic",
+        battery: "Battery",
+        "e-waste": "E-Waste",
+        "e waste": "E-Waste",
+        elv: "ELV",
+        "used oil": "Used Oil",
+        tyre: "Tyre",
+      };
+
+      const normalizedCategory =
+        categoryMap[String(category).trim().toLowerCase()];
+
+      if (!normalizedCategory) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid credit type. Allowed types: Battery, Plastic, E-Waste, ELV, Used Oil, Tyre",
+        });
+      }
+
+      listing.category = normalizedCategory;
     }
 
-    if (req.user.kycStatus !== "approved") {
-      return res.status(403).json({
-        success: false,
-        message:
-          "Your KYC must be approved before creating a listing",
-      });
+    if (quantity !== undefined) {
+      const parsedQuantity = Number(quantity);
+
+      if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Quantity must be a valid positive number",
+        });
+      }
+
+      const reserved = Number(listing.reservedQuantity || 0);
+      const total = Number(listing.totalQuantity ?? listing.quantity ?? 0);
+      const consumed = Math.max(0, total - Number(listing.quantity || 0));
+
+      if (reserved > 0 || consumed > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Quantity cannot be edited after inventory has been reserved or consumed",
+        });
+      }
+
+      listing.quantity = parsedQuantity;
+      listing.totalQuantity = parsedQuantity;
     }
 
-    if (
-      !category ||
-      !quantity ||
-      !price ||
-      !location ||
-      !complianceYear ||
-      !validTill
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Category, quantity, price, location, compliance year and valid till are required",
-      });
+    if (price !== undefined) {
+      const parsedPrice = Number(price);
+
+      if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Price must be a valid positive number",
+        });
+      }
+
+      listing.price = parsedPrice;
     }
 
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Proof document is required",
-      });
+    if (location !== undefined) {
+      const trimmedLocation = String(location).trim();
+
+      if (!trimmedLocation) {
+        return res.status(400).json({
+          success: false,
+          message: "Location is required",
+        });
+      }
+
+      listing.location = trimmedLocation;
     }
 
-    const parsedQuantity = Number(quantity);
-    const parsedPrice = Number(price);
-    const parsedValidTill = new Date(validTill);
+    if (complianceYear !== undefined) {
+      const trimmedYear = String(complianceYear).trim();
 
-    if (
-      Number.isNaN(parsedQuantity) ||
-      parsedQuantity <= 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Quantity must be a valid positive number",
-      });
+      if (!trimmedYear) {
+        return res.status(400).json({
+          success: false,
+          message: "Compliance year is required",
+        });
+      }
+
+      listing.complianceYear = trimmedYear;
     }
 
-    if (
-      Number.isNaN(parsedPrice) ||
-      parsedPrice <= 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Price must be a valid positive number",
-      });
+    if (validTill !== undefined) {
+      const parsedValidTill = new Date(validTill);
+
+      if (Number.isNaN(parsedValidTill.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid till must be a valid date",
+        });
+      }
+
+      if (parsedValidTill < new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid till date must be in the future",
+        });
+      }
+
+      listing.validTill = parsedValidTill;
     }
 
-    if (Number.isNaN(parsedValidTill.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid till must be a valid date",
-      });
+    if (description !== undefined) {
+      listing.description = String(description).trim();
     }
 
-    const document = await Document.create({
-      owner: req.user._id,
-      type: "epr_certificate",
-      fileName: req.file.originalname,
-      fileUrl: `/uploads/documents/${req.file.filename}`,
-      mimeType: req.file.mimetype,
-      fileSize: req.file.size,
-      verificationStatus: "pending",
+    await listing.save();
+
+    await createActivityLog({
+      actorId: req.user._id,
+      action: "listing_updated",
+      entityType: "seller_listing",
+      entityId: listing._id,
+      before: previous,
+      after: {
+        category: listing.category,
+        quantity: listing.quantity,
+        totalQuantity: listing.totalQuantity,
+        reservedQuantity: listing.reservedQuantity,
+        price: listing.price,
+        location: listing.location,
+        complianceYear: listing.complianceYear,
+        validTill: listing.validTill,
+        description: listing.description,
+        status: listing.status,
+      },
+      metadata: {
+        sellerId: listing.sellerId,
+      },
     });
-
-    const listing = await SellerListing.create({
-      sellerId: req.user._id,
-      category,
-      quantity: parsedQuantity,
-      price: parsedPrice,
-      location,
-      complianceYear,
-      validTill: parsedValidTill,
-      description: description || "",
-      documentId: document._id,
-      status: "pending_review",
-    });
-
-    return res.status(201).json({
-      success: true,
-      message:
-        "Listing submitted successfully for verification",
-      listing,
-    });
-  } catch (error) {
-    console.error("Create listing error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create listing",
-    });
-  }
-};
-
-/*
-|--------------------------------------------------------------------------
-| Get pending seller listings
-|--------------------------------------------------------------------------
-*/
-
-export const getPendingListings = async (
-  req,
-  res
-) => {
-  try {
-    const listings = await SellerListing.find({
-      status: "pending_review",
-    })
-      .populate(
-        "sellerId",
-        "name company email phone role kycStatus verifiedBadge"
-      )
-      .populate(
-        "documentId",
-        "fileName fileUrl mimeType fileSize verificationStatus createdAt"
-      )
-      .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
-      count: listings.length,
-      listings,
+      message: "Listing updated successfully",
+      listing,
     });
   } catch (error) {
-    console.error(
-      "Get pending listings error:",
-      error
-    );
+    console.error("Update seller listing error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to fetch pending listings",
+      message: "Failed to update listing",
     });
   }
 };
 
 /*
 |--------------------------------------------------------------------------
-| Approve / reject seller listing
+| Pause / resume / cancel seller listing
 |--------------------------------------------------------------------------
 */
 
-export const reviewListing = async (
-  req,
-  res
-) => {
+export const updateSellerListingStatus = async (req, res) => {
   try {
     const { listingId } = req.params;
-    const {
-      status,
-      rejectionReason,
-    } = req.body;
+    const { status, reason = "" } = req.body || {};
 
-    if (!["active", "rejected"].includes(status)) {
+    if (!mongoose.Types.ObjectId.isValid(listingId)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Status must be active or rejected",
+        message: "Invalid listingId",
       });
     }
 
-    if (
-      status === "rejected" &&
-      !rejectionReason?.trim()
-    ) {
+    if (!["active", "paused", "cancelled"].includes(status)) {
       return res.status(400).json({
         success: false,
         message:
-          "Rejection reason is required",
+          "Status must be active, paused or cancelled",
       });
     }
 
-    const listing =
-      await SellerListing.findById(listingId);
+    const listing = await SellerListing.findOne({
+      _id: listingId,
+      sellerId: req.user._id,
+    });
 
     if (!listing) {
       return res.status(404).json({
@@ -211,227 +1053,89 @@ export const reviewListing = async (
       });
     }
 
-    if (listing.status !== "pending_review") {
+    const previousStatus = listing.status;
+
+    if (
+      previousStatus === "cancelled" ||
+      previousStatus === "sold" ||
+      previousStatus === "rejected" ||
+      previousStatus === "expired"
+    ) {
       return res.status(400).json({
         success: false,
         message:
-          "This listing has already been reviewed",
+          "This listing can no longer be paused, resumed or cancelled",
+      });
+    }
+
+    if (
+      status === "active" &&
+      listing.validTill < new Date()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "An expired listing cannot be resumed",
+      });
+    }
+
+    if (
+      status === "cancelled" &&
+      Number(listing.reservedQuantity || 0) > 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "You cannot cancel a listing while inventory is reserved for an active deal",
+      });
+    }
+
+    if (previousStatus === status) {
+      return res.status(400).json({
+        success: false,
+        message: `Listing is already ${status}`,
       });
     }
 
     listing.status = status;
 
-    listing.rejectionReason =
-      status === "rejected"
-        ? rejectionReason.trim()
-        : "";
-
-    listing.approvedBy = req.user._id;
-    listing.approvedAt = new Date();
+    if (status === "cancelled") {
+      listing.rejectionReason = String(reason).trim();
+    }
 
     await listing.save();
 
-    /*
-    |--------------------------------------------------------------------------
-    | Update proof document
-    |--------------------------------------------------------------------------
-    */
-
-    const document =
-      await Document.findById(
-        listing.documentId
-      );
-
-    if (document) {
-      document.verificationStatus =
-        status === "active"
-          ? "approved"
-          : "rejected";
-
-      document.rejectionReason =
-        status === "rejected"
-          ? rejectionReason.trim()
-          : "";
-
-      document.verifiedBy =
-        req.user._id;
-
-      document.verifiedAt =
-        new Date();
-
-      await document.save();
-    }
+    await createActivityLog({
+      actorId: req.user._id,
+      action: "listing_status_changed",
+      entityType: "seller_listing",
+      entityId: listing._id,
+      before: {
+        status: previousStatus,
+      },
+      after: {
+        status: listing.status,
+      },
+      metadata: {
+        sellerId: listing.sellerId,
+        category: listing.category,
+        quantity: listing.quantity,
+        reservedQuantity: listing.reservedQuantity,
+        reason: String(reason).trim(),
+      },
+    });
 
     return res.status(200).json({
       success: true,
-      message:
-        status === "active"
-          ? "Listing approved successfully"
-          : "Listing rejected successfully",
+      message: `Listing ${status} successfully`,
       listing,
     });
   } catch (error) {
-    console.error(
-      "Review listing error:",
-      error
-    );
+    console.error("Update seller listing status error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to review listing",
-    });
-  }
-};
-
-//get active listing
-
-export const getActiveListings = async (req, res) => {
-  try {
-    const {
-      category,
-      location,
-      complianceYear,
-      sort = "newest",
-    } = req.query;
-
-    const filter = {
-      status: "active",
-      validTill: {
-        $gte: new Date(),
-      },
-    };
-
-    if (category) {
-      filter.category = category;
-    }
-
-    if (location) {
-      filter.location = location;
-    }
-
-    if (complianceYear) {
-      filter.complianceYear = complianceYear;
-    }
-
-    let query = SellerListing.find(filter)
-      .populate(
-        "sellerId",
-        "name company verifiedBadge"
-      )
-      .populate(
-        "documentId",
-        "fileName fileUrl verificationStatus"
-      );
-
-    switch (sort) {
-      case "price-asc":
-        query = query.sort({ price: 1 });
-        break;
-
-      case "price-desc":
-        query = query.sort({ price: -1 });
-        break;
-
-      case "qty-desc":
-        query = query.sort({ quantity: -1 });
-        break;
-
-      case "newest":
-      default:
-        query = query.sort({ createdAt: -1 });
-        break;
-    }
-
-    const listings = await query;
-
-    return res.status(200).json({
-      success: true,
-      count: listings.length,
-      listings,
-    });
-  } catch (error) {
-    console.error(
-      "Get active listings error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch marketplace listings",
-    });
-  }
-};
-
-export const getListingById = async (req, res) => {
-  try {
-    const { listingId } = req.params;
-
-    const listing = await SellerListing.findOne({
-      _id: listingId,
-      status: "active",
-      validTill: {
-        $gte: new Date(),
-      },
-    })
-      .populate(
-        "sellerId",
-        "name company verifiedBadge"
-      )
-      .populate(
-        "documentId",
-        "fileName fileUrl mimeType verificationStatus"
-      );
-
-    if (!listing) {
-      return res.status(404).json({
-        success: false,
-        message: "Listing not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      listing,
-    });
-  } catch (error) {
-    console.error(
-      "Get listing by ID error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch listing",
-    });
-  }
-};
-
-export const getSellerListings = async (req, res) => {
-  try {
-    const listings = await SellerListing.find({
-      sellerId: req.user._id,
-    })
-      .populate(
-        "documentId",
-        "fileName fileUrl verificationStatus rejectionReason"
-      )
-      .sort({ createdAt: -1 });
-
-    return res.status(200).json({
-      success: true,
-      count: listings.length,
-      listings,
-    });
-  } catch (error) {
-    console.error(
-      "Get seller listings error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch seller listings",
+      message: "Failed to update listing status",
     });
   }
 };

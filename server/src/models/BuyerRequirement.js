@@ -1,5 +1,29 @@
 import mongoose from "mongoose";
 
+const matchedListingSchema = new mongoose.Schema(
+  {
+    listingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SellerListing",
+      required: true,
+    },
+
+    quantity: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    matchedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const buyerRequirementSchema = new mongoose.Schema(
   {
     buyerId: {
@@ -33,12 +57,6 @@ const buyerRequirementSchema = new mongoose.Schema(
       default: "",
     },
 
-    matchedListingId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "SellerListing",
-      default: null,
-    },
-
     complianceYear: {
       type: String,
       required: [true, "Compliance year is required"],
@@ -55,12 +73,30 @@ const buyerRequirementSchema = new mongoose.Schema(
       ],
     },
 
+    matchedListings: {
+      type: [matchedListingSchema],
+      default: [],
+    },
+
+    matchedQuantity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    remainingQuantity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     status: {
       type: String,
       enum: [
         "open",
         "matching",
-        "matched",
+        "partially_matched",
+        "fully_matched",
         "closed",
         "cancelled",
       ],

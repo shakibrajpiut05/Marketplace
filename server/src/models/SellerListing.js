@@ -15,10 +15,23 @@ const sellerListingSchema = new mongoose.Schema(
       trim: true,
     },
 
+    totalQuantity: {
+      type: Number,
+      required: false,
+      min: [0, "Total quantity cannot be negative"],
+      default: null,
+    },
+
     quantity: {
       type: Number,
       required: [true, "Quantity is required"],
       min: [0, "Quantity cannot be negative"],
+    },
+
+    reservedQuantity: {
+      type: Number,
+      default: 0,
+      min: [0, "Reserved quantity cannot be negative"],
     },
 
     price: {
@@ -47,10 +60,7 @@ const sellerListingSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
-      maxlength: [
-        2000,
-        "Description cannot exceed 2000 characters",
-      ],
+      maxlength: [2000, "Description cannot exceed 2000 characters"],
       default: "",
     },
 
@@ -62,13 +72,7 @@ const sellerListingSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: [
-        "pending_review",
-        "active",
-        "rejected",
-        "expired",
-        "sold",
-      ],
+      enum: ["pending_review", "active", "paused", "rejected", "expired", "sold", "cancelled"],
       default: "pending_review",
       index: true,
     },
@@ -92,12 +96,15 @@ const sellerListingSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-const SellerListing = mongoose.model(
-  "SellerListing",
-  sellerListingSchema
-);
+sellerListingSchema.pre("validate", function () {
+  if (this.totalQuantity == null && this.quantity != null) {
+    this.totalQuantity = this.quantity;
+  }
+});
+
+const SellerListing = mongoose.model("SellerListing", sellerListingSchema);
 
 export default SellerListing;

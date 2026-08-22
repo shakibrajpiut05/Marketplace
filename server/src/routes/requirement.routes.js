@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import { protect } from "../middleware/auth.middleware.js";
@@ -6,6 +7,7 @@ import { authorize } from "../middleware/role.middleware.js";
 import {
   createRequirement,
   getBuyerRequirements,
+  getAdminRequirements,
   matchRequirement,
 } from "../controllers/requirement.controller.js";
 
@@ -15,21 +17,28 @@ router.post(
   "/",
   protect,
   authorize("buyer"),
-  createRequirement
+  createRequirement,
 );
 
 router.get(
   "/buyer",
   protect,
   authorize("buyer"),
-  getBuyerRequirements
+  getBuyerRequirements,
+);
+
+router.get(
+  "/admin",
+  protect,
+  authorize("admin"),
+  getAdminRequirements,
 );
 
 router.patch(
   "/admin/:requirementId/match",
   protect,
   authorize("admin"),
-  matchRequirement
+  matchRequirement,
 );
 
 export default router;

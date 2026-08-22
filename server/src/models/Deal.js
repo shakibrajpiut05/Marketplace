@@ -5,8 +5,27 @@ const dealSchema = new mongoose.Schema(
     requestId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "PurchaseRequest",
-      required: true,
-      unique: true,
+      default: null,
+      index: true,
+    },
+
+    inventoryReserved: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    requirementId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BuyerRequirement",
+      default: null,
+      index: true,
+    },
+
+    matchedListingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SellerListing",
+      default: null,
       index: true,
     },
 
@@ -71,12 +90,7 @@ const dealSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: [
-        "pending",
-        "initiated",
-        "received",
-        "failed",
-      ],
+      enum: ["pending", "initiated", "received", "failed"],
       default: "pending",
     },
 
@@ -93,7 +107,7 @@ const dealSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const Deal = mongoose.model("Deal", dealSchema);
