@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { NotificationBell, AdminProfileMenu } from "../components/AccountTools.jsx";
 import {
   Badge,
   Button,
@@ -440,6 +442,7 @@ function VerificationQueue({ kycDocuments, kycLoading, kycError, reviewKyc }) {
 }
 
 function AdminDashboard({ onNavigate }) {
+  const { user, logout } = useAuth();
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [kycDocuments, setKycDocuments] = useState([]);
@@ -712,11 +715,11 @@ function AdminDashboard({ onNavigate }) {
         <div className="px-4 py-3 border-b border-white/10">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-[#5AC361] text-white flex items-center justify-center font-bold text-sm">
-              A
+              {(user?.name || "A").slice(0, 1).toUpperCase()}
             </div>
-            <div>
-              <p className="text-xs font-semibold text-white">Super Admin</p>
-              <p className="text-[10px] text-white/40">admin@eprnexus.in</p>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white truncate">{user?.name || "Admin"}</p>
+              <p className="text-[10px] text-white/40 truncate">{user?.email || "Administrator"}</p>
             </div>
           </div>
         </div>
@@ -764,7 +767,10 @@ function AdminDashboard({ onNavigate }) {
         </nav>
         <div className="px-3 py-3 border-t border-white/10">
           <button
-            onClick={() => onNavigate("home")}
+            onClick={() => {
+              logout();
+              onNavigate("home");
+            }}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-white/50 hover:bg-white/10 hover:text-white w-full transition-colors"
           >
             <svg
@@ -818,6 +824,10 @@ function AdminDashboard({ onNavigate }) {
           >
             {NAV.find((n) => n.id === active)?.label ?? "Admin Dashboard"}
           </h1>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <NotificationBell compact />
+            <AdminProfileMenu onNavigate={onNavigate} compact />
+          </div>
         </div>
 
         <div className="px-4 sm:px-6 py-6 max-w-7xl">

@@ -10,6 +10,7 @@ import {
 } from "../components/ui";
 
 import api from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 /*
 |--------------------------------------------------------------------------
@@ -309,6 +310,7 @@ function RequestModal({ onClose, credit }) {
 */
 
 function CreditDetailPage({ creditId, onNavigate }) {
+  const { user, isAuthenticated } = useAuth();
   const [credit, setCredit] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -603,7 +605,24 @@ function CreditDetailPage({ creditId, onNavigate }) {
               <Button
                 className="w-full mb-3"
                 size="lg"
-                onClick={() => setShowModal(true)}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    onNavigate("auth");
+                    return;
+                  }
+
+                  if (user?.role !== "buyer") {
+                    alert("Only verified buyer accounts can request credits.");
+                    return;
+                  }
+
+                  if (!user.emailVerified || user.kycStatus !== "approved") {
+                    onNavigate("verification");
+                    return;
+                  }
+
+                  setShowModal(true);
+                }}
               >
                 <svg
                   className="w-4 h-4"

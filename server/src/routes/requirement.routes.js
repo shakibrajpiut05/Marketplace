@@ -2,6 +2,7 @@
 import express from "express";
 
 import { protect } from "../middleware/auth.middleware.js";
+import { requireVerifiedUser } from "../middleware/verifiedUser.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 
 import {
@@ -16,6 +17,7 @@ const router = express.Router();
 router.post(
   "/",
   protect,
+  requireVerifiedUser,
   authorize("buyer"),
   createRequirement,
 );

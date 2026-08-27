@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import { PORT, CLIENT_URL } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import documentRoutes from "./routes/document.routes.js";
+import verificationRoutes from "./routes/verification.routes.js";
 
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
@@ -85,6 +86,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/documents", documentRoutes);
+app.use("/api/verifications", verificationRoutes);
 app.use("/api/listings", listingRoutes);
 app.use("/api/deals", dealRoutes);
 app.use("/api/requirements", requirementRoutes);

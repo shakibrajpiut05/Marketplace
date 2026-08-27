@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { CREDIT_TYPES } from '../data/mock'
-import api from '../services/api.js'
+import { useEffect, useMemo, useState } from "react";
+import { CREDIT_TYPES } from "../data/mock";
+import api from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { NotificationBell, ProfileMenu } from "../components/AccountTools.jsx";
 import {
   Badge,
   Button,
@@ -12,11 +14,11 @@ import {
   Input,
   Select,
   Textarea,
-} from '../components/ui'
+} from "../components/ui";
 const NAV = [
   {
-    id: 'dashboard',
-    label: 'Dashboard',
+    id: "dashboard",
+    label: "Dashboard",
     icon: (
       <svg
         className="w-4 h-4"
@@ -34,8 +36,8 @@ const NAV = [
     ),
   },
   {
-    id: 'requirements',
-    label: 'My Requirements',
+    id: "requirements",
+    label: "My Requirements",
     icon: (
       <svg
         className="w-4 h-4"
@@ -53,8 +55,8 @@ const NAV = [
     ),
   },
   {
-    id: 'requests',
-    label: 'My Requests',
+    id: "requests",
+    label: "My Requests",
     icon: (
       <svg
         className="w-4 h-4"
@@ -63,13 +65,17 @@ const NAV = [
         stroke="currentColor"
         strokeWidth={1.5}
       >
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"
+        />
       </svg>
     ),
   },
   {
-    id: 'deals',
-    label: 'Deals',
+    id: "deals",
+    label: "Deals",
     icon: (
       <svg
         className="w-4 h-4"
@@ -87,8 +93,8 @@ const NAV = [
     ),
   },
   {
-    id: 'messages',
-    label: 'Messages',
+    id: "messages",
+    label: "Messages",
     icon: (
       <svg
         className="w-4 h-4"
@@ -106,8 +112,8 @@ const NAV = [
     ),
   },
   {
-    id: 'profile',
-    label: 'Profile',
+    id: "profile",
+    label: "Profile",
     icon: (
       <svg
         className="w-4 h-4"
@@ -124,28 +130,28 @@ const NAV = [
       </svg>
     ),
   },
-]
+];
 function PostRequirementModal({ onClose, onCreated }) {
-  const [done, setDone] = useState(false)
+  const [done, setDone] = useState(false);
   const [form, setForm] = useState({
-    type: '',
-    qty: '',
-    budget: '',
-    location: '',
-    year: '2025-26',
-    notes: '',
-  })
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
+    type: "",
+    qty: "",
+    budget: "",
+    location: "",
+    year: "2025-26",
+    notes: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const states = [
-    'Any Location',
-    'Delhi',
-    'Gujarat',
-    'Maharashtra',
-    'Tamil Nadu',
-    'Rajasthan',
-    'Karnataka',
-  ]
+    "Any Location",
+    "Delhi",
+    "Gujarat",
+    "Maharashtra",
+    "Tamil Nadu",
+    "Rajasthan",
+    "Karnataka",
+  ];
   if (done) {
     return (
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -167,20 +173,20 @@ function PostRequirementModal({ onClose, onCreated }) {
           </div>
           <h3
             className="text-xl font-bold text-[#0F1923] mb-2"
-            style={{ fontFamily: 'Outfit, sans-serif' }}
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             Requirement Posted!
           </h3>
           <p className="text-sm text-[#6B7280] mb-5">
-            EPR Nexus will match you with suitable verified sellers and reach out within 24–48
-            hours.
+            EPR Nexus will match you with suitable verified sellers and reach
+            out within 24–48 hours.
           </p>
           <Button onClick={onClose} className="w-full">
             Done
           </Button>
         </div>
       </div>
-    )
+    );
   }
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -188,11 +194,14 @@ function PostRequirementModal({ onClose, onCreated }) {
         <div className="p-5 border-b border-[#E5EAF0] flex items-center justify-between">
           <h3
             className="text-lg font-bold text-[#0F1923]"
-            style={{ fontFamily: 'Outfit, sans-serif' }}
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             Post a Requirement
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-[#F0F4F8] rounded-lg text-[#6B7280]">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-[#F0F4F8] rounded-lg text-[#6B7280]"
+          >
             <svg
               className="w-5 h-5"
               fill="none"
@@ -200,7 +209,11 @@ function PostRequirementModal({ onClose, onCreated }) {
               stroke="currentColor"
               strokeWidth={2}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -225,20 +238,24 @@ function PostRequirementModal({ onClose, onCreated }) {
               type="number"
               placeholder="e.g. 175"
               value={form.budget}
-              onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, budget: e.target.value }))
+              }
             />
           </div>
           <Select
             label="Location Preference"
             options={states.map((s) => ({ label: s, value: s }))}
             value={form.location}
-            onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, location: e.target.value }))
+            }
           />
           <Select
             label="Compliance Year *"
             options={[
-              { label: 'FY 2025-26', value: '2025-26' },
-              { label: 'FY 2024-25', value: '2024-25' },
+              { label: "FY 2025-26", value: "2025-26" },
+              { label: "FY 2024-25", value: "2024-25" },
             ]}
             value={form.year}
             onChange={(e) => setForm((f) => ({ ...f, year: e.target.value }))}
@@ -263,179 +280,164 @@ function PostRequirementModal({ onClose, onCreated }) {
               disabled={submitting}
               onClick={async () => {
                 if (!form.type) {
-                  setError('Please select a credit type.')
-                  return
+                  setError("Please select a credit type.");
+                  return;
                 }
 
                 if (!form.qty || Number(form.qty) <= 0) {
-                  setError('Please enter a valid required quantity.')
-                  return
+                  setError("Please enter a valid required quantity.");
+                  return;
                 }
 
                 if (!form.budget || Number(form.budget) <= 0) {
-                  setError('Please enter a valid budget.')
-                  return
+                  setError("Please enter a valid budget.");
+                  return;
                 }
 
                 if (!form.year) {
-                  setError('Please select a compliance year.')
-                  return
+                  setError("Please select a compliance year.");
+                  return;
                 }
 
                 try {
-                  setSubmitting(true)
-                  setError('')
+                  setSubmitting(true);
+                  setError("");
 
-                  const response = await api.post('/requirements', {
+                  const response = await api.post("/requirements", {
                     type: form.type,
                     quantity: Number(form.qty),
                     budget: Number(form.budget),
-                    location: form.location === 'Any Location' ? '' : form.location,
+                    location:
+                      form.location === "Any Location" ? "" : form.location,
                     complianceYear: form.year,
                     notes: form.notes.trim(),
-                  })
+                  });
 
                   if (response.data.success) {
-                    onCreated?.(response.data.requirement)
-                    setDone(true)
+                    onCreated?.(response.data.requirement);
+                    setDone(true);
                     setForm({
-                      type: '',
-                      qty: '',
-                      budget: '',
-                      location: '',
-                      year: '2025-26',
-                      notes: '',
-                    })
+                      type: "",
+                      qty: "",
+                      budget: "",
+                      location: "",
+                      year: "2025-26",
+                      notes: "",
+                    });
                   }
                 } catch (error) {
-                  console.error('Post requirement error:', error)
+                  console.error("Post requirement error:", error);
                   setError(
                     error.response?.data?.message ||
-                      'Failed to post requirement.'
-                  )
+                      "Failed to post requirement.",
+                  );
                 } finally {
-                  setSubmitting(false)
+                  setSubmitting(false);
                 }
               }}
             >
-              {submitting ? 'Posting...' : 'Post Requirement'}
+              {submitting ? "Posting..." : "Post Requirement"}
             </Button>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 function BuyerDashboard({ onNavigate }) {
-  const [active, setActive] = useState('dashboard')
-  const [showPostModal, setShowPostModal] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { user } = useAuth();
+  const [active, setActive] = useState("dashboard");
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const [buyerRequirements, setBuyerRequirements] = useState([])
-  const [requirementLoading, setRequirementLoading] = useState(true)
-  const [requirementError, setRequirementError] = useState('')
+  const [buyerRequirements, setBuyerRequirements] = useState([]);
+  const [requirementLoading, setRequirementLoading] = useState(true);
+  const [requirementError, setRequirementError] = useState("");
 
-  const [buyerRequests, setBuyerRequests] = useState([])
-  const [buyerDeals, setBuyerDeals] = useState([])
-  const [requestLoading, setRequestLoading] = useState(true)
-  const [requestError, setRequestError] = useState('')
-  const [dealLoading, setDealLoading] = useState(true)
-  const [dealError, setDealError] = useState('')
+  const [buyerRequests, setBuyerRequests] = useState([]);
+  const [buyerDeals, setBuyerDeals] = useState([]);
+  const [requestLoading, setRequestLoading] = useState(true);
+  const [requestError, setRequestError] = useState("");
+  const [dealLoading, setDealLoading] = useState(true);
+  const [dealError, setDealError] = useState("");
 
   const fetchBuyerData = async () => {
     try {
-      setRequirementLoading(true)
-      setRequestLoading(true)
-      setDealLoading(true)
+      setRequirementLoading(true);
+      setRequestLoading(true);
+      setDealLoading(true);
 
-      setRequirementError('')
-      setRequestError('')
-      setDealError('')
+      setRequirementError("");
+      setRequestError("");
+      setDealError("");
 
-      const [
-        requirementsResponse,
-        requestsResponse,
-        dealsResponse,
-      ] = await Promise.all([
-        api.get('/requirements/buyer'),
-        api.get('/requests/buyer'),
-        api.get('/deals/buyer'),
-      ])
+      const [requirementsResponse, requestsResponse, dealsResponse] =
+        await Promise.all([
+          api.get("/requirements/buyer"),
+          api.get("/requests/buyer"),
+          api.get("/deals/buyer"),
+        ]);
 
       if (requirementsResponse.data.success) {
-        setBuyerRequirements(
-          requirementsResponse.data.requirements || []
-        )
+        setBuyerRequirements(requirementsResponse.data.requirements || []);
       }
 
       if (requestsResponse.data.success) {
-        setBuyerRequests(
-          requestsResponse.data.requests || []
-        )
+        setBuyerRequests(requestsResponse.data.requests || []);
       }
 
       if (dealsResponse.data.success) {
-        setBuyerDeals(
-          dealsResponse.data.deals || []
-        )
+        setBuyerDeals(dealsResponse.data.deals || []);
       }
     } catch (error) {
-      console.error(
-        'Failed to fetch buyer dashboard data:',
-        error
-      )
+      console.error("Failed to fetch buyer dashboard data:", error);
 
       const message =
-        error.response?.data?.message ||
-        'Failed to load buyer data.'
+        error.response?.data?.message || "Failed to load buyer data.";
 
-      setRequirementError(message)
-      setRequestError(message)
-      setDealError(message)
+      setRequirementError(message);
+      setRequestError(message);
+      setDealError(message);
     } finally {
-      setRequirementLoading(false)
-      setRequestLoading(false)
-      setDealLoading(false)
+      setRequirementLoading(false);
+      setRequestLoading(false);
+      setDealLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchBuyerData()
-  }, [])
+    fetchBuyerData();
+  }, []);
 
   const openReqs = useMemo(
     () =>
-      buyerRequirements.filter(
-        (requirement) =>
-          ['open', 'matching', 'matched'].includes(
-            requirement.status
-          )
+      buyerRequirements.filter((requirement) =>
+        ["open", "matching", "matched"].includes(requirement.status),
       ).length,
     [buyerRequirements],
-  )
+  );
 
-  const requestsSent = buyerRequests.length
+  const requestsSent = buyerRequests.length;
   const dealsInProgress = buyerDeals.filter(
-    (deal) => !['completed', 'cancelled'].includes(deal.status),
-  ).length
-  const completedDeals = buyerDeals.filter((deal) => deal.status === 'completed').length
+    (deal) => !["completed", "cancelled"].includes(deal.status),
+  ).length;
+  const completedDeals = buyerDeals.filter(
+    (deal) => deal.status === "completed",
+  ).length;
   return (
     <div className="min-h-screen bg-[#F7F9FB] flex">
       {showPostModal && (
         <PostRequirementModal
           onClose={() => setShowPostModal(false)}
           onCreated={(createdRequirement) => {
-            setBuyerRequirements((current) => [
-              createdRequirement,
-              ...current,
-            ])
+            setBuyerRequirements((current) => [createdRequirement, ...current]);
           }}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-56 bg-white border-r border-[#E5EAF0] flex flex-col transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:flex`}
+        className={`fixed inset-y-0 left-0 z-40 w-56 bg-white border-r border-[#E5EAF0] flex flex-col transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:relative md:translate-x-0 md:flex`}
       >
         <div className="px-4 py-4 border-b border-[#E5EAF0] flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-[#5AC361] flex items-center justify-center">
@@ -456,7 +458,7 @@ function BuyerDashboard({ onNavigate }) {
           <div>
             <p
               className="text-sm font-bold text-[#0F1923]"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
               EPR Nexus
             </p>
@@ -469,7 +471,9 @@ function BuyerDashboard({ onNavigate }) {
               A
             </div>
             <div>
-              <p className="text-xs font-semibold text-[#374151]">ABC Motors Ltd.</p>
+              <p className="text-xs font-semibold text-[#374151]">
+                ABC Motors Ltd.
+              </p>
               <p className="text-[10px] text-[#9CA3AF]">Buyer #112</p>
             </div>
           </div>
@@ -479,10 +483,10 @@ function BuyerDashboard({ onNavigate }) {
             <button
               key={n.id}
               onClick={() => {
-                setActive(n.id)
-                setSidebarOpen(false)
+                setActive(n.id);
+                setSidebarOpen(false);
               }}
-              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${active === n.id ? 'bg-[#EBF8EC] text-[#2E7D32]' : 'text-[#6B7280] hover:bg-[#F7F9FB] hover:text-[#374151]'}`}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${active === n.id ? "bg-[#EBF8EC] text-[#2E7D32]" : "text-[#6B7280] hover:bg-[#F7F9FB] hover:text-[#374151]"}`}
             >
               {n.icon}
               {n.label}
@@ -491,7 +495,7 @@ function BuyerDashboard({ onNavigate }) {
         </nav>
         <div className="px-3 py-3 border-t border-[#E5EAF0]">
           <button
-            onClick={() => onNavigate('home')}
+            onClick={() => onNavigate("home")}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-[#EF4444] hover:bg-[#FEF2F2] w-full transition-colors"
           >
             <svg
@@ -533,21 +537,40 @@ function BuyerDashboard({ onNavigate }) {
                 stroke="currentColor"
                 strokeWidth={2}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             </button>
             <h1
               className="text-base font-semibold text-[#0F1923]"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {NAV.find((n) => n.id === active)?.label ?? 'Dashboard'}
+              {NAV.find((n) => n.id === active)?.label ?? "Dashboard"}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <Button size="sm" variant="outline" onClick={() => onNavigate('marketplace')}>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <NotificationBell compact />
+            <ProfileMenu onNavigate={onNavigate} compact />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onNavigate("marketplace")}
+            >
               Browse Credits
             </Button>
-            <Button size="sm" onClick={() => setShowPostModal(true)}>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (user?.emailVerified && user?.kycStatus === "approved") {
+                  setShowPostModal(true);
+                } else {
+                  onNavigate("verification");
+                }
+              }}
+            >
               <svg
                 className="w-4 h-4"
                 fill="none"
@@ -555,7 +578,11 @@ function BuyerDashboard({ onNavigate }) {
                 stroke="currentColor"
                 strokeWidth={2}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
               Post Requirement
             </Button>
@@ -563,7 +590,7 @@ function BuyerDashboard({ onNavigate }) {
         </div>
 
         <div className="px-4 sm:px-6 py-6 max-w-6xl">
-          {active === 'dashboard' && (
+          {active === "dashboard" && (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <StatCard
@@ -648,15 +675,31 @@ function BuyerDashboard({ onNavigate }) {
               <div className="flex items-center justify-between mb-4">
                 <h2
                   className="text-base font-semibold text-[#0F1923]"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   My Recent Requirements
                 </h2>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setActive('requirements')}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActive("requirements")}
+                  >
                     View All
                   </Button>
-                  <Button size="sm" onClick={() => setShowPostModal(true)}>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (
+                        user?.emailVerified &&
+                        user?.kycStatus === "approved"
+                      ) {
+                        setShowPostModal(true);
+                      } else {
+                        onNavigate("verification");
+                      }
+                    }}
+                  >
                     + Post Requirement
                   </Button>
                 </div>
@@ -664,7 +707,13 @@ function BuyerDashboard({ onNavigate }) {
 
               <Card>
                 <Table
-                  headers={['Credit Type', 'Required Qty', 'Budget (\u20B9/MT)', 'Year', 'Status']}
+                  headers={[
+                    "Credit Type",
+                    "Required Qty",
+                    "Budget (\u20B9/MT)",
+                    "Year",
+                    "Status",
+                  ]}
                 >
                   {requirementLoading ? (
                     <Tr>
@@ -695,12 +744,22 @@ function BuyerDashboard({ onNavigate }) {
                       <Tr key={requirement._id}>
                         <Td>
                           <span className="font-medium">
-                            {requirement.type || '—'}
+                            {requirement.type || "—"}
                           </span>
                         </Td>
-                        <Td>{Number(requirement.quantity || 0).toLocaleString('en-IN')} MT</Td>
-                        <Td>₹{Number(requirement.budget || 0).toLocaleString('en-IN')}</Td>
-                        <Td>{requirement.complianceYear || '—'}</Td>
+                        <Td>
+                          {Number(requirement.quantity || 0).toLocaleString(
+                            "en-IN",
+                          )}{" "}
+                          MT
+                        </Td>
+                        <Td>
+                          ₹
+                          {Number(requirement.budget || 0).toLocaleString(
+                            "en-IN",
+                          )}
+                        </Td>
+                        <Td>{requirement.complianceYear || "—"}</Td>
                         <Td>
                           <Badge label={requirement.status} />
                         </Td>
@@ -725,19 +784,20 @@ function BuyerDashboard({ onNavigate }) {
                     d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
                   />
                 </svg>
-                Contact details are hidden. All communication is routed through EPR Nexus. You are
-                identified as <strong className="mx-1">Buyer #112</strong> on the marketplace.
+                Contact details are hidden. All communication is routed through
+                EPR Nexus. You are identified as{" "}
+                <strong className="mx-1">Buyer #112</strong> on the marketplace.
               </div>
             </>
           )}
 
-          {active === 'requirements' && (
+          {active === "requirements" && (
             <Card>
               <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
                 <div>
                   <h2
                     className="font-semibold text-[#0F1923]"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     All My Requirements
                   </h2>
@@ -748,7 +808,13 @@ function BuyerDashboard({ onNavigate }) {
 
                 <Button
                   size="sm"
-                  onClick={() => setShowPostModal(true)}
+                  onClick={() => {
+                    if (user?.emailVerified && user?.kycStatus === "approved") {
+                      setShowPostModal(true);
+                    } else {
+                      onNavigate("verification");
+                    }
+                  }}
                 >
                   + Post Requirement
                 </Button>
@@ -768,62 +834,56 @@ function BuyerDashboard({ onNavigate }) {
                     No requirements yet
                   </p>
                   <p className="text-sm mt-1">
-                    Post a requirement and EPR Nexus will help match it with verified sellers.
+                    Post a requirement and EPR Nexus will help match it with
+                    verified sellers.
                   </p>
                 </div>
               ) : (
                 <Table
                   headers={[
-                    'Credit Type',
-                    'Required Qty',
-                    'Budget (₹/MT)',
-                    'Location Pref.',
-                    'Year',
-                    'Notes',
-                    'Status',
-                    'Posted On',
+                    "Credit Type",
+                    "Required Qty",
+                    "Budget (₹/MT)",
+                    "Location Pref.",
+                    "Year",
+                    "Notes",
+                    "Status",
+                    "Posted On",
                   ]}
                 >
                   {buyerRequirements.map((requirement) => (
                     <Tr key={requirement._id}>
                       <Td>
-                        <span className="font-medium">
-                          {requirement.type}
-                        </span>
+                        <span className="font-medium">{requirement.type}</span>
                       </Td>
                       <Td>
                         {Number(requirement.quantity || 0).toLocaleString(
-                          'en-IN'
-                        )}{' '}
+                          "en-IN",
+                        )}{" "}
                         MT
                       </Td>
                       <Td>
-                        ₹{Number(requirement.budget || 0).toLocaleString(
-                          'en-IN'
+                        ₹
+                        {Number(requirement.budget || 0).toLocaleString(
+                          "en-IN",
                         )}
                       </Td>
-                      <Td>
-                        {requirement.location || 'Any Location'}
-                      </Td>
-                      <Td>
-                        {requirement.complianceYear || '—'}
-                      </Td>
+                      <Td>{requirement.location || "Any Location"}</Td>
+                      <Td>{requirement.complianceYear || "—"}</Td>
                       <Td className="max-w-[220px]">
                         <span className="truncate block text-[#6B7280] text-xs">
-                          {requirement.notes || '—'}
+                          {requirement.notes || "—"}
                         </span>
                       </Td>
                       <Td>
-                        <Badge
-                          label={requirement.status}
-                        />
+                        <Badge label={requirement.status} />
                       </Td>
                       <Td>
                         {requirement.createdAt
-                          ? new Date(
-                              requirement.createdAt
-                            ).toLocaleDateString('en-IN')
-                          : '—'}
+                          ? new Date(requirement.createdAt).toLocaleDateString(
+                              "en-IN",
+                            )
+                          : "—"}
                       </Td>
                     </Tr>
                   ))}
@@ -832,13 +892,13 @@ function BuyerDashboard({ onNavigate }) {
             </Card>
           )}
 
-          {active === 'requests' && (
+          {active === "requests" && (
             <Card>
               <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
                 <div>
                   <h2
                     className="font-semibold text-[#0F1923]"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     My Requests
                   </h2>
@@ -875,52 +935,66 @@ function BuyerDashboard({ onNavigate }) {
                           <div className="flex items-center gap-2 mb-4">
                             <h3
                               className="font-semibold text-[#0F1923]"
-                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                              style={{ fontFamily: "Outfit, sans-serif" }}
                             >
-                              {request.listing?.category || 'EPR Credit'}
+                              {request.listing?.category || "EPR Credit"}
                             </h3>
                             <Badge label={request.status} />
                           </div>
 
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                             <div>
-                              <p className="text-xs text-[#9CA3AF]">Requested Quantity</p>
+                              <p className="text-xs text-[#9CA3AF]">
+                                Requested Quantity
+                              </p>
                               <p className="font-medium text-[#374151]">
                                 {request.requestedQuantity ?? 0} MT
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs text-[#9CA3AF]">Listing Price</p>
+                              <p className="text-xs text-[#9CA3AF]">
+                                Listing Price
+                              </p>
                               <p className="font-medium text-[#374151]">
-                                ₹{request.listing?.price ?? '—'} / MT
+                                ₹{request.listing?.price ?? "—"} / MT
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs text-[#9CA3AF]">Compliance Year</p>
+                              <p className="text-xs text-[#9CA3AF]">
+                                Compliance Year
+                              </p>
                               <p className="font-medium text-[#374151]">
-                                FY {request.listing?.complianceYear || '—'}
+                                FY {request.listing?.complianceYear || "—"}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-[#9CA3AF]">Location</p>
                               <p className="font-medium text-[#374151]">
-                                {request.listing?.location || '—'}
+                                {request.listing?.location || "—"}
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs text-[#9CA3AF]">Submitted</p>
+                              <p className="text-xs text-[#9CA3AF]">
+                                Submitted
+                              </p>
                               <p className="font-medium text-[#374151]">
                                 {request.createdAt
-                                  ? new Date(request.createdAt).toLocaleDateString('en-IN')
-                                  : '—'}
+                                  ? new Date(
+                                      request.createdAt,
+                                    ).toLocaleDateString("en-IN")
+                                  : "—"}
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs text-[#9CA3AF]">Valid Till</p>
+                              <p className="text-xs text-[#9CA3AF]">
+                                Valid Till
+                              </p>
                               <p className="font-medium text-[#374151]">
                                 {request.listing?.validTill
-                                  ? new Date(request.listing.validTill).toLocaleDateString('en-IN')
-                                  : '—'}
+                                  ? new Date(
+                                      request.listing.validTill,
+                                    ).toLocaleDateString("en-IN")
+                                  : "—"}
                               </p>
                             </div>
                           </div>
@@ -949,8 +1023,9 @@ function BuyerDashboard({ onNavigate }) {
 
                           <div className="mt-4 p-3 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg">
                             <p className="text-xs text-[#1D4ED8]">
-                              EPR Nexus manages all buyer-seller communication and negotiation.
-                              Seller contact details remain confidential.
+                              EPR Nexus manages all buyer-seller communication
+                              and negotiation. Seller contact details remain
+                              confidential.
                             </p>
                           </div>
                         </div>
@@ -962,13 +1037,13 @@ function BuyerDashboard({ onNavigate }) {
             </Card>
           )}
 
-          {active === 'deals' && (
+          {active === "deals" && (
             <Card>
               <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
                 <div>
                   <h2
                     className="font-semibold text-[#0F1923]"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     My Deals
                   </h2>
@@ -1000,15 +1075,20 @@ function BuyerDashboard({ onNavigate }) {
                 <div className="divide-y divide-[#E5EAF0]">
                   {buyerDeals.map((deal) => {
                     const stages = [
-                      { key: 'matched', label: 'Matched' },
-                      { key: 'negotiating', label: 'Negotiating' },
-                      { key: 'terms_agreed', label: 'Terms Agreed' },
-                      { key: 'payment_coordination', label: 'Payment Coordination' },
-                      { key: 'completed', label: 'Completed' },
-                    ]
-                    const order = stages.map((stage) => stage.key)
-                    const currentIndex = order.indexOf(deal.status)
-                    const totalValue = Number(deal.quantity || 0) * Number(deal.agreedPrice || 0)
+                      { key: "matched", label: "Matched" },
+                      { key: "negotiating", label: "Negotiating" },
+                      { key: "terms_agreed", label: "Terms Agreed" },
+                      {
+                        key: "payment_coordination",
+                        label: "Payment Coordination",
+                      },
+                      { key: "completed", label: "Completed" },
+                    ];
+                    const order = stages.map((stage) => stage.key);
+                    const currentIndex = order.indexOf(deal.status);
+                    const totalValue =
+                      Number(deal.quantity || 0) *
+                      Number(deal.agreedPrice || 0);
 
                     return (
                       <div key={deal._id} className="p-5">
@@ -1017,37 +1097,61 @@ function BuyerDashboard({ onNavigate }) {
                             <div className="flex items-center gap-2 mb-4">
                               <h3
                                 className="font-semibold text-[#0F1923]"
-                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                                style={{ fontFamily: "Outfit, sans-serif" }}
                               >
-                                {deal.listing?.category || 'EPR Credit Deal'}
+                                {deal.listing?.category || "EPR Credit Deal"}
                               </h3>
-                              <Badge label={deal.status.replaceAll('_', ' ')} />
+                              <Badge label={deal.status.replaceAll("_", " ")} />
                             </div>
 
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                               <div>
-                                <p className="text-xs text-[#9CA3AF]">Quantity</p>
-                                <p className="font-medium text-[#374151]">{deal.quantity} MT</p>
+                                <p className="text-xs text-[#9CA3AF]">
+                                  Quantity
+                                </p>
+                                <p className="font-medium text-[#374151]">
+                                  {deal.quantity} MT
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-[#9CA3AF]">Agreed Price</p>
-                                <p className="font-medium text-[#374151]">₹{deal.agreedPrice} / MT</p>
+                                <p className="text-xs text-[#9CA3AF]">
+                                  Agreed Price
+                                </p>
+                                <p className="font-medium text-[#374151]">
+                                  ₹{deal.agreedPrice} / MT
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-[#9CA3AF]">Transaction Value</p>
-                                <p className="font-semibold text-[#5AC361]">₹{totalValue.toLocaleString('en-IN')}</p>
+                                <p className="text-xs text-[#9CA3AF]">
+                                  Transaction Value
+                                </p>
+                                <p className="font-semibold text-[#5AC361]">
+                                  ₹{totalValue.toLocaleString("en-IN")}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-[#9CA3AF]">Payment</p>
-                                <p className="font-medium text-[#374151] capitalize">{deal.paymentStatus || 'pending'}</p>
+                                <p className="text-xs text-[#9CA3AF]">
+                                  Payment
+                                </p>
+                                <p className="font-medium text-[#374151] capitalize">
+                                  {deal.paymentStatus || "pending"}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-[#9CA3AF]">Location</p>
-                                <p className="font-medium text-[#374151]">{deal.listing?.location || '—'}</p>
+                                <p className="text-xs text-[#9CA3AF]">
+                                  Location
+                                </p>
+                                <p className="font-medium text-[#374151]">
+                                  {deal.listing?.location || "—"}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-[#9CA3AF]">Compliance Year</p>
-                                <p className="font-medium text-[#374151]">FY {deal.listing?.complianceYear || '—'}</p>
+                                <p className="text-xs text-[#9CA3AF]">
+                                  Compliance Year
+                                </p>
+                                <p className="font-medium text-[#374151]">
+                                  FY {deal.listing?.complianceYear || "—"}
+                                </p>
                               </div>
                             </div>
 
@@ -1057,48 +1161,60 @@ function BuyerDashboard({ onNavigate }) {
                               </p>
                               <div className="flex items-center gap-1 overflow-x-auto">
                                 {stages.map((stage, index) => {
-                                  const done = currentIndex >= index
+                                  const done = currentIndex >= index;
                                   return (
-                                    <div key={stage.key} className="flex items-center gap-1 shrink-0">
+                                    <div
+                                      key={stage.key}
+                                      className="flex items-center gap-1 shrink-0"
+                                    >
                                       <div
                                         className={`px-2 py-1 rounded text-[10px] font-medium whitespace-nowrap ${
-                                          done ? 'bg-[#5AC361] text-white' : 'bg-[#F0F4F8] text-[#9CA3AF]'
+                                          done
+                                            ? "bg-[#5AC361] text-white"
+                                            : "bg-[#F0F4F8] text-[#9CA3AF]"
                                         }`}
                                       >
                                         {stage.label}
                                       </div>
                                       {index < stages.length - 1 && (
-                                        <div className={`w-3 h-0.5 ${done ? 'bg-[#5AC361]' : 'bg-[#E5EAF0]'}`} />
+                                        <div
+                                          className={`w-3 h-0.5 ${done ? "bg-[#5AC361]" : "bg-[#E5EAF0]"}`}
+                                        />
                                       )}
                                     </div>
-                                  )
+                                  );
                                 })}
                               </div>
                             </div>
 
                             <div className="mt-4 p-3 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg">
                               <p className="text-xs text-[#1D4ED8]">
-                                EPR Nexus manages the transaction, payment coordination, and seller communication.
+                                EPR Nexus manages the transaction, payment
+                                coordination, and seller communication.
                               </p>
                             </div>
 
                             {deal.notes && (
                               <div className="mt-3">
-                                <p className="text-xs text-[#9CA3AF]">Deal Notes</p>
-                                <p className="text-sm text-[#374151] mt-1">{deal.notes}</p>
+                                <p className="text-xs text-[#9CA3AF]">
+                                  Deal Notes
+                                </p>
+                                <p className="text-sm text-[#374151] mt-1">
+                                  {deal.notes}
+                                </p>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
-                    )
+                    );
                   })}
                 </div>
               )}
             </Card>
           )}
 
-          {(active === 'messages' || active === 'profile') && (
+          {(active === "messages" || active === "profile") && (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <div className="w-14 h-14 rounded-full bg-[#F0F4F8] flex items-center justify-center text-[#9CA3AF] mb-3">
                 <svg
@@ -1117,7 +1233,7 @@ function BuyerDashboard({ onNavigate }) {
               </div>
               <p
                 className="font-semibold text-[#374151]"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {NAV.find((n) => n.id === active)?.label}
               </p>
@@ -1129,6 +1245,6 @@ function BuyerDashboard({ onNavigate }) {
         </div>
       </main>
     </div>
-  )
+  );
 }
-export { BuyerDashboard as default }
+export { BuyerDashboard as default };

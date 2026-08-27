@@ -7,12 +7,14 @@ const userSchema = new mongoose.Schema(
       required: [true, "Name is required"],
       trim: true,
       minlength: [2, "Name must be at least 2 characters"],
+      maxlength: [120, "Name is too long"],
     },
 
     company: {
       type: String,
-      required: [true, "Company name is required"],
       trim: true,
+      default: "",
+      maxlength: [200, "Company name is too long"],
     },
 
     email: {
@@ -25,13 +27,61 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: [true, "Password is required"],
+      select: false,
+      required: function () {
+        return this.authProvider === "local";
+      },
       minlength: [6, "Password must be at least 6 characters"],
+    },
+
+    authProvider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
+    },
+
+    googleId: {
+      type: String,
+      sparse: true,
+      unique: true,
     },
 
     phone: {
       type: String,
+      required: function () {
+        return this.role !== "admin";
+      },
       trim: true,
+      default: "",
+    },
+
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    emailVerificationTokenHash: {
+      type: String,
+      select: false,
+      default: null,
+    },
+
+    emailVerificationExpires: {
+      type: Date,
+      select: false,
+      default: null,
+    },
+
+    signupSessionTokenHash: {
+      type: String,
+      select: false,
+      default: null,
+    },
+
+    signupSessionExpires: {
+      type: Date,
+      select: false,
+      default: null,
     },
 
     role: {
@@ -51,6 +101,18 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    kycRejectionReason: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: [1000, "Rejection reason is too long"],
+    },
+
+    kycSubmittedAt: {
+      type: Date,
+      default: null,
+    },
+
     isActive: {
       type: Boolean,
       default: true,
@@ -58,7 +120,7 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const User = mongoose.model("User", userSchema);

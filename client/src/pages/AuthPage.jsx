@@ -1,267 +1,230 @@
-
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button, Input } from "../components/ui";
 import { useAuth } from "../context/AuthContext.jsx";
-import api from "../services/api.js";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+
+function GoogleButton({ onCredential, disabled }) {
+  const containerRef = useRef(null);
+  const handlerRef = useRef(onCredential);
+
+  useEffect(() => {
+    handlerRef.current = onCredential;
+  }, [onCredential]);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !containerRef.current) return undefined;
+
+    let cancelled = false;
+
+    const renderGoogleButton = () => {
+      if (cancelled || !window.google?.accounts?.id || !containerRef.current) {
+        return;
+      }
+
+      containerRef.current.innerHTML = "";
+
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (response) => handlerRef.current?.(response.credential),
+      });
+
+      window.google.accounts.id.renderButton(containerRef.current, {
+        theme: "outline",
+        size: "large",
+        shape: "rectangular",
+        width: 360,
+        text: "continue_with",
+      });
+    };
+
+    if (window.google?.accounts?.id) {
+      renderGoogleButton();
+      return undefined;
+    }
+
+    const existingScript = document.querySelector(
+      'script[src="https://accounts.google.com/gsi/client"]',
+    );
+
+    const script = existingScript || document.createElement("script");
+
+    if (!existingScript) {
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+
+    script.addEventListener("load", renderGoogleButton);
+
+    return () => {
+      cancelled = true;
+      script.removeEventListener("load", renderGoogleButton);
+    };
+  }, []);
+
+  if (!GOOGLE_CLIENT_ID) {
+    return (
+      <div className="text-xs text-[#92400E] bg-[#FFFBEB] border border-[#FCD34D] rounded-lg px-3 py-2 text-center">
+        Google Sign-In is not configured yet. Add VITE_GOOGLE_CLIENT_ID to the
+        client .env.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex justify-center ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+    >
+      <div ref={containerRef} />
+    </div>
+  );
+}
 
 function AuthPage({ onNavigate }) {
-  const { login, register } = useAuth();
+  const { login, register, googleLogin } = useAuth();
 
   const [mode, setMode] = useState("login");
   const [role, setRole] = useState("buyer");
-
   const [form, setForm] = useState({
     name: "",
+    phone: "",
     email: "",
     password: "",
-    company: "",
-    gst: "",
-    phone: "",
-    doc: null,
   });
-
-  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [googleSignupNotice, setGoogleSignupNotice] = useState(false);
 
-  const uploadKycDocument = async (documentFile) => {
-    const formData = new FormData();
-
-    formData.append("type", "gst_certificate");
-    formData.append("document", documentFile);
-
-    const response = await api.post(
-      "/documents/kyc",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
-    );
-
-    return response.data;
-  };
-
-  const handleSubmit = async () => {
-    if (loading) return;
-
-    setLoading(true);
+  const handleManualLogin = async () => {
+    if (!form.email || !form.password) {
+      setError("Please enter your email and password.");
+      return;
+    }
 
     try {
-      /*
-      |--------------------------------------------------------------------------
-      | LOGIN
-      |--------------------------------------------------------------------------
-      */
+      setLoading(true);
+      setError("");
+      const response = await login(form.email, form.password, role);
 
-      if (mode === "login") {
-        if (!form.email || !form.password) {
-          alert("Please enter your email and password.");
-          return;
-        }
-
-        const response = await login(
-          form.email,
-          form.password
-        );
-
-        const userRole = response.user.role;
-
-        if (userRole === "admin") {
-          onNavigate("admin-dashboard");
-        } else if (userRole === "seller") {
-          onNavigate("seller-dashboard");
-        } else {
-          onNavigate("buyer-dashboard");
-        }
-
-        return;
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | SIGNUP - STEP 1
-      |--------------------------------------------------------------------------
-      */
-
-      if (step === 1) {
-        if (!form.name) {
-          alert("Please enter your full name.");
-          return;
-        }
-
-        if (!form.email) {
-          alert("Please enter your email address.");
-          return;
-        }
-
-        if (!form.password) {
-          alert("Please enter your password.");
-          return;
-        }
-
-        if (form.password.length < 6) {
-          alert(
-            "Password must be at least 6 characters long."
-          );
-          return;
-        }
-
-        setStep(2);
-
-        return;
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | SIGNUP - STEP 2 / KYC
-      |--------------------------------------------------------------------------
-      */
-
-      if (!form.company) {
-        alert("Please enter your company name.");
-        return;
-      }
-
-      if (!form.gst) {
-        alert("Please enter your GST number.");
-        return;
-      }
-
-      if (!form.phone) {
-        alert("Please enter your phone number.");
-        return;
-      }
-
-      if (!form.doc) {
-        alert(
-          "Please upload your business document."
-        );
-        return;
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | CLIENT-SIDE FILE VALIDATION
-      |--------------------------------------------------------------------------
-      */
-
-      const allowedTypes = [
-        "application/pdf",
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-      ];
-
-      if (!allowedTypes.includes(form.doc.type)) {
-        alert(
-          "Only PDF, JPG, PNG and WEBP files are allowed."
-        );
-        return;
-      }
-
-      const maxFileSize = 5 * 1024 * 1024;
-
-      if (form.doc.size > maxFileSize) {
-        alert(
-          "File size must be less than 5 MB."
-        );
-        return;
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | REGISTER USER
-      |--------------------------------------------------------------------------
-      */
-
-      const registerResponse = await register({
-        name: form.name,
-        company: form.company,
-        email: form.email,
-        password: form.password,
-        phone: form.phone,
-        role,
-      });
-
-      if (!registerResponse.success) {
-        throw new Error(
-          registerResponse.message ||
-            "Registration failed."
-        );
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | LOGIN AFTER REGISTRATION
-      |--------------------------------------------------------------------------
-      |
-      | We need the JWT before uploading the KYC document
-      | because the KYC API is protected.
-      |
-      */
-
-      const loginResponse = await login(
-        form.email,
-        form.password
-      );
-
-      if (!loginResponse.success) {
-        throw new Error(
-          "Registration succeeded, but automatic login failed."
-        );
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | UPLOAD KYC DOCUMENT
-      |--------------------------------------------------------------------------
-      */
-
-      const kycResponse =
-        await uploadKycDocument(form.doc);
-
-      if (!kycResponse.success) {
-        throw new Error(
-          kycResponse.message ||
-            "KYC document upload failed."
-        );
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | SUCCESS
-      |--------------------------------------------------------------------------
-      */
-
-      alert(
-        "Registration and KYC submission successful!"
-      );
-
-      if (role === "seller") {
-        onNavigate("seller-dashboard");
-      } else {
-        onNavigate("buyer-dashboard");
-      }
-    } catch (error) {
-      console.error("Auth error:", error);
-
-      alert(
-        error.response?.data?.message ||
-          error.message ||
-          "Something went wrong. Please try again."
+      onNavigate("home");
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Unable to sign in. Please check your details.",
       );
     } finally {
       setLoading(false);
     }
   };
 
+  const handleManualSignup = async () => {
+    if (!form.name.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+
+    if (!form.phone.trim()) {
+      setError("Phone number is required.");
+      return;
+    }
+
+    if (!form.email.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    if (!form.password) {
+      setError("Please create a password.");
+      return;
+    }
+
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await register({
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        role,
+      });
+
+      sessionStorage.setItem(
+        "signupPendingNotice",
+        JSON.stringify({
+          email: response.email,
+          name: response.name,
+          role: response.role,
+          emailVerificationSent: response.emailVerificationSent,
+          developmentVerificationUrl: response.developmentVerificationUrl || "",
+        }),
+      );
+
+      onNavigate("email-pending");
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Unable to create your account.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleCredential = async (credential) => {
+    if (loading) return;
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await googleLogin({ credential });
+
+      if (response.needsSignup) {
+        setGoogleSignupNotice(true);
+        return;
+      }
+
+      if (response.needsPhone) {
+        onNavigate("google-signup-phone");
+        return;
+      }
+
+      onNavigate("home");
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message || "Google authentication failed.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
+    setError("");
+    setGoogleSignupNotice(false);
+    setForm({
+      name: "",
+      phone: "",
+      email: "",
+      password: "",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#F7F9FB] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-7">
           <div className="inline-flex items-center gap-2 mb-4">
             <div className="w-9 h-9 rounded-xl bg-[#5AC361] flex items-center justify-center">
               <svg
@@ -269,7 +232,7 @@ function AuthPage({ onNavigate }) {
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
-                strokeWidth={2}
+                strokeWidth="2"
               >
                 <path
                   strokeLinecap="round"
@@ -278,12 +241,9 @@ function AuthPage({ onNavigate }) {
                 />
               </svg>
             </div>
-
             <span
               className="text-xl font-bold text-[#0F1923]"
-              style={{
-                fontFamily: "Outfit, sans-serif",
-              }}
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
               EPR Nexus
             </span>
@@ -291,249 +251,158 @@ function AuthPage({ onNavigate }) {
 
           <h1
             className="text-2xl font-bold text-[#0F1923]"
-            style={{
-              fontFamily: "Outfit, sans-serif",
-            }}
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             {mode === "login"
               ? "Sign In to Your Account"
-              : step === 1
-                ? "Create Your Account"
-                : "Complete KYC"}
+              : "Create Your EPR Nexus Account"}
           </h1>
-
           <p className="text-sm text-[#6B7280] mt-1">
             {mode === "login"
               ? "Access your EPR Nexus dashboard"
-              : step === 1
-                ? "Join India's trusted EPR credit marketplace"
-                : "One last step — verify your business identity"}
+              : "Create your account first. Email verification is required before login."}
           </p>
         </div>
 
         <div className="bg-white border border-[#E5EAF0] rounded-2xl p-6 shadow-sm">
-          {/* Role toggle (signup) */}
-          {mode === "signup" && step === 1 && (
-            <div className="flex gap-2 mb-5 p-1 bg-[#F0F4F8] rounded-xl">
-              {["buyer", "seller"].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
-                    role === r
-                      ? "bg-white shadow-sm text-[#0F1923]"
-                      : "text-[#6B7280]"
-                  }`}
-                >
-                  {r === "buyer"
-                    ? "🏢 Sign Up as Buyer"
-                    : "📋 Sign Up as Seller"}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Login role select */}
-          {mode === "login" && (
-            <div className="flex gap-2 mb-5 p-1 bg-[#F0F4F8] rounded-xl">
-              {["buyer", "seller", "admin"].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all capitalize ${
-                    role === r
-                      ? "bg-white shadow-sm text-[#0F1923] font-semibold"
-                      : "text-[#6B7280]"
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Step 1 / Login form */}
-          {(mode === "login" || step === 1) && (
-            <div className="flex flex-col gap-4">
-              {mode === "signup" && (
-                <Input
-                  label="Full Name *"
-                  placeholder="Your full name"
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      name: e.target.value,
-                    }))
-                  }
-                />
-              )}
-
-              <Input
-                label="Email Address *"
-                type="email"
-                placeholder="work@company.com"
-                value={form.email}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    email: e.target.value,
-                  }))
-                }
-              />
-
-              <Input
-                label="Password *"
-                type="password"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    password: e.target.value,
-                  }))
-                }
-              />
-
-              {mode === "login" && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    className="text-xs text-[#5AC361] hover:underline"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-              )}
-
-              <Button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="w-full mt-1"
+          <div className="flex gap-2 mb-5 p-1 bg-[#F0F4F8] rounded-xl">
+            {[
+              ["buyer", "Buyer"],
+              ["seller", "Seller"],
+              ...(mode === "login" ? [["admin", "Admin"]] : []),
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setRole(value)}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                  role === value
+                    ? "bg-white shadow-sm text-[#0F1923] font-semibold"
+                    : "text-[#6B7280]"
+                }`}
               >
-                {loading
-                  ? "Please wait..."
-                  : mode === "login"
-                    ? "Sign In"
-                    : "Continue to KYC →"}
-              </Button>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {error && (
+            <div className="mb-4 rounded-lg bg-[#FEF2F2] border border-[#FECACA] px-3 py-2 text-sm text-[#991B1B]">
+              {error}
             </div>
           )}
 
-          {/* Step 2: KYC */}
-          {mode === "signup" && step === 2 && (
-            <div className="flex flex-col gap-4">
-              <div className="p-3 bg-[#EBF8EC] border border-[#A5D6A7] rounded-lg text-xs text-[#2E7D32]">
-                Business verification required to ensure
-                platform trust and compliance.
-              </div>
+          {mode === "signup" && (
+            <div className="mb-5 rounded-xl bg-[#F7F9FB] border border-[#E5EAF0] p-3 text-xs text-[#6B7280]">
+              <span className="font-semibold text-[#374151]">
+                What happens next?
+              </span>{" "}
+              Create account → verify your email → sign in → submit company/CPCB
+              proof → wait for admin approval.
+            </div>
+          )}
 
+          <div className="space-y-4">
+            {mode === "signup" && (
               <Input
-                label="Business / Company Name *"
-                placeholder="Legal entity name"
-                value={form.company}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    company: e.target.value,
+                label="Full Name *"
+                placeholder="Your full name"
+                value={form.name}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: event.target.value,
                   }))
                 }
               />
+            )}
 
-              <Input
-                label="GST Number *"
-                placeholder="22AAAAA0000A1Z5"
-                value={form.gst}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    gst: e.target.value,
-                  }))
-                }
-              />
-
+            {mode === "signup" && (
               <Input
                 label="Phone Number *"
                 type="tel"
                 placeholder="+91 98765 43210"
                 value={form.phone}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    phone: e.target.value,
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    phone: event.target.value,
                   }))
                 }
               />
+            )}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-[#374151]">
-                  Upload Business Document *
-                </label>
+            <Input
+              label="Email Address *"
+              type="email"
+              placeholder="work@company.com"
+              value={form.email}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  email: event.target.value,
+                }))
+              }
+            />
 
-                <label className="border-2 border-dashed border-[#E5EAF0] rounded-xl p-5 text-center hover:border-[#5AC361] transition-colors cursor-pointer">
-                  <svg
-                    className="w-8 h-8 text-[#9CA3AF] mx-auto mb-2"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 0115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                    />
-                  </svg>
+            <Input
+              label="Password *"
+              type="password"
+              placeholder="At least 6 characters"
+              value={form.password}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  password: event.target.value,
+                }))
+              }
+            />
 
-                  <p className="text-sm text-[#6B7280]">
-                    {form.doc
-                      ? form.doc.name
-                      : "GST Certificate / Registration Document"}
-                  </p>
+            <Button
+              className="w-full"
+              disabled={loading}
+              onClick={
+                mode === "login" ? handleManualLogin : handleManualSignup
+              }
+            >
+              {loading
+                ? "Please wait..."
+                : mode === "login"
+                  ? "Sign In"
+                  : "Create Account"}
+            </Button>
+          </div>
 
-                  <p className="text-xs text-[#9CA3AF] mt-1">
-                    PDF, JPG, PNG (max 5 MB)
-                  </p>
-
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    className="hidden"
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        doc:
-                          e.target.files?.[0] ||
-                          null,
-                      }))
-                    }
-                  />
-                </label>
+          {role !== "admin" && (
+            <>
+              <div className="flex items-center gap-3 my-5">
+                <div className="h-px flex-1 bg-[#E5EAF0]" />
+                <span className="text-xs text-[#9CA3AF]">
+                  OR CONTINUE WITH GOOGLE
+                </span>
+                <div className="h-px flex-1 bg-[#E5EAF0]" />
               </div>
 
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setStep(1)}
-                  disabled={loading}
-                >
-                  ← Back
-                </Button>
+              {mode === "login" && (
+                <p className="text-xs text-[#6B7280] text-center mb-3">
+                  Existing Google users sign in immediately. New Google users
+                  will be asked to complete signup.
+                </p>
+              )}
 
-                <Button
-                  className="flex-1"
-                  onClick={handleSubmit}
-                  disabled={loading}
-                >
-                  {loading
-                    ? "Submitting..."
-                    : "Complete Sign Up"}
-                </Button>
-              </div>
-            </div>
+              {mode === "signup" && (
+                <p className="text-xs text-[#6B7280] text-center mb-3">
+                  Already have a Google account? Use Google to sign in. If it is
+                  new, EPR Nexus will guide you through signup and ask for your
+                  phone number on the next screen.
+                </p>
+              )}
+
+              <GoogleButton
+                disabled={loading}
+                onCredential={handleGoogleCredential}
+              />
+            </>
           )}
 
           <div className="mt-5 pt-4 border-t border-[#E5EAF0] text-center text-sm text-[#6B7280]">
@@ -543,10 +412,7 @@ function AuthPage({ onNavigate }) {
                 <button
                   type="button"
                   className="text-[#5AC361] font-medium hover:underline"
-                  onClick={() => {
-                    setMode("signup");
-                    setStep(1);
-                  }}
+                  onClick={() => switchMode("signup")}
                 >
                   Sign Up
                 </button>
@@ -557,10 +423,7 @@ function AuthPage({ onNavigate }) {
                 <button
                   type="button"
                   className="text-[#5AC361] font-medium hover:underline"
-                  onClick={() => {
-                    setMode("login");
-                    setStep(1);
-                  }}
+                  onClick={() => switchMode("login")}
                 >
                   Sign In
                 </button>
@@ -570,14 +433,60 @@ function AuthPage({ onNavigate }) {
         </div>
 
         <p className="text-xs text-[#9CA3AF] text-center mt-4 leading-relaxed">
-          By continuing, you agree to our Terms of Service and
-          Privacy Policy. All transactions are mediated by EPR
-          Nexus.
+          By continuing, you agree to the EPR Nexus Terms of Service and Privacy
+          Policy.
         </p>
       </div>
+
+      {googleSignupNotice && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-7">
+            <div className="w-12 h-12 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center mb-4">
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-[#0F1923]">
+              New Google account
+            </h2>
+            <p className="text-sm text-[#6B7280] mt-2 leading-relaxed">
+              This Google account is not registered with EPR Nexus yet. Please
+              sign up to create your account. Your Google name and email will be
+              used automatically.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setGoogleSignupNotice(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  setGoogleSignupNotice(false);
+                  onNavigate("google-signup-phone");
+                }}
+              >
+                Continue Signup
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export { AuthPage as default };
-

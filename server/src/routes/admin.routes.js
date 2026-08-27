@@ -7,9 +7,9 @@ import {
   reviewListing,
 } from "../controllers/listing.controller.js";
 import {
-  getPendingKycDocuments,
-  reviewKycDocument,
-} from "../controllers/document.controller.js";
+  getPendingVerifications,
+  reviewVerification,
+} from "../controllers/verification.controller.js";
 
 const router = express.Router();
 
@@ -31,7 +31,7 @@ router.get("/dashboard", protect, authorize("admin"), (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.get("/kyc", protect, authorize("admin"), getPendingKycDocuments);
+router.get("/kyc", protect, authorize("admin"), getPendingVerifications);
 
 /*
 |--------------------------------------------------------------------------
@@ -43,7 +43,7 @@ router.patch(
   "/kyc/:documentId",
   protect,
   authorize("admin"),
-  reviewKycDocument,
+  reviewVerification,
 );
 
 router.get("/listings", protect, authorize("admin"), getPendingListings);

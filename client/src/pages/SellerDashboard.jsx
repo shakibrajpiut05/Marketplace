@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { NotificationBell, ProfileMenu } from "../components/AccountTools.jsx";
 import { Badge, Button, Card, StatCard, Table, Tr, Td } from "../components/ui";
 const NAV = [
   {
@@ -137,6 +139,7 @@ const NAV = [
   },
 ];
 function SellerDashboard({ onNavigate }) {
+  const { user } = useAuth();
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [purchaseRequests, setPurchaseRequests] = useState([]);
@@ -367,7 +370,10 @@ function SellerDashboard({ onNavigate }) {
               {NAV.find((n) => n.id === active)?.label ?? "Dashboard"}
             </h1>
           </div>
-          <Button size="sm" onClick={() => onNavigate("add-listing")}>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <NotificationBell compact />
+            <ProfileMenu onNavigate={onNavigate} compact />
+            <Button size="sm" onClick={() => onNavigate("add-listing")}>
             <svg
               className="w-4 h-4"
               fill="none"
@@ -383,6 +389,7 @@ function SellerDashboard({ onNavigate }) {
             </svg>
             Add New Listing
           </Button>
+          </div>
         </div>
 
         <div className="px-4 sm:px-6 py-6 max-w-6xl">
