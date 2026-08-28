@@ -5,6 +5,7 @@ import { CREDIT_TYPES } from "../data/mock";
 import { Badge, CreditTypeIcon } from "../components/ui";
 
 import api from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
 const SORT_OPTIONS = [
   { label: "Price: Low to High", value: "price-asc" },
   { label: "Price: High to Low", value: "price-desc" },
@@ -12,6 +13,7 @@ const SORT_OPTIONS = [
   { label: "Newest First", value: "newest" },
 ];
 function MarketplacePage({ onNavigate }) {
+  const { user } = useAuth();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -353,15 +355,26 @@ function MarketplacePage({ onNavigate }) {
                   </div>
                 </div>
 
-                <button
-                  className="w-full mt-1 py-2 rounded-lg text-sm font-medium border border-[#5AC361] text-[#5AC361] hover:bg-[#EBF8EC] transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNavigate("credit-detail", credit._id);
-                  }}
-                >
-                  Request This Credit
-                </button>
+                {user?.role === 'seller' ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full mt-1 py-2 rounded-lg text-sm font-medium border border-[#E5EAF0] bg-[#F8FAFC] text-[#9CA3AF] cursor-not-allowed"
+                    title="Sellers are not authorized to request credits."
+                  >
+                    Seller accounts cannot request credits
+                  </button>
+                ) : (
+                  <button
+                    className="w-full mt-1 py-2 rounded-lg text-sm font-medium border border-[#5AC361] text-[#5AC361] hover:bg-[#EBF8EC] transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigate("credit-detail", credit._id);
+                    }}
+                  >
+                    Request This Credit
+                  </button>
+                )}
               </div>
             ))}
           </div>

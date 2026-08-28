@@ -84,7 +84,7 @@ function GoogleButton({ onCredential, disabled }) {
 }
 
 function AuthPage({ onNavigate }) {
-  const { login, register, googleLogin } = useAuth();
+  const { login, register, googleLogin, startSignupSession } = useAuth();
 
   const [mode, setMode] = useState("login");
   const [role, setRole] = useState("buyer");
@@ -109,10 +109,37 @@ function AuthPage({ onNavigate }) {
       setError("");
       const response = await login(form.email, form.password, role);
 
-      onNavigate("home");
+      const destination =
+        response?.user?.role === "admin"
+          ? "admin-dashboard"
+          : response?.user?.role === "seller"
+            ? "seller-dashboard"
+            : "buyer-dashboard";
+
+      onNavigate(destination, undefined, response?.user);
     } catch (requestError) {
+      const responseData = requestError.response?.data;
+
+      if (responseData?.code === "EMAIL_VERIFICATION_REQUIRED") {
+        startSignupSession(responseData);
+
+        sessionStorage.setItem(
+          "signupPendingNotice",
+          JSON.stringify({
+            email: responseData.email,
+            name: responseData.name,
+            role: responseData.role,
+            emailVerificationSent: false,
+            developmentVerificationUrl: "",
+          }),
+        );
+
+        onNavigate("email-pending");
+        return;
+      }
+
       setError(
-        requestError.response?.data?.message ||
+        responseData?.message ||
           "Unable to sign in. Please check your details.",
       );
     } finally {

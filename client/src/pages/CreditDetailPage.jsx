@@ -18,6 +18,47 @@ import { useAuth } from "../context/AuthContext.jsx";
 |--------------------------------------------------------------------------
 */
 
+function AuthenticationRequiredModal({ onClose, onLogin, onSignup }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-[#E5EAF0] p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3
+              className="text-lg font-bold text-[#0F1923]"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Authentication Required
+            </h3>
+            <p className="text-sm text-[#6B7280] mt-1 leading-relaxed">
+              Please login or create an account to continue with this action.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg text-[#6B7280] hover:bg-[#F7F9FB]"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button variant="outline" className="w-full" onClick={onLogin}>
+            Login
+          </Button>
+          <Button className="w-full" onClick={onSignup}>
+            Sign Up
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RequestModal({ onClose, credit }) {
   const [form, setForm] = useState({
     qty: "",
@@ -29,6 +70,7 @@ function RequestModal({ onClose, credit }) {
     phone: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async () => {
     if (submitting) return;
@@ -310,11 +352,12 @@ function RequestModal({ onClose, credit }) {
 */
 
 function CreditDetailPage({ creditId, onNavigate }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const [credit, setCredit] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [saved, setSaved] = useState(false);
 
   /*
@@ -435,6 +478,20 @@ function CreditDetailPage({ creditId, onNavigate }) {
 
   return (
     <div className="min-h-screen bg-[#F7F9FB]">
+      {showAuthModal && (
+        <AuthenticationRequiredModal
+          onClose={() => setShowAuthModal(false)}
+          onLogin={() => {
+            setShowAuthModal(false);
+            onNavigate("auth");
+          }}
+          onSignup={() => {
+            setShowAuthModal(false);
+            onNavigate("auth-signup");
+          }}
+        />
+      )}
+
       {showModal && (
         <RequestModal onClose={() => setShowModal(false)} credit={credit} />
       )}
@@ -602,48 +659,63 @@ function CreditDetailPage({ creditId, onNavigate }) {
                 </p>
               </div>
 
-              <Button
-                className="w-full mb-3"
-                size="lg"
-                onClick={() => {
-                  if (!isAuthenticated) {
-                    onNavigate("auth");
-                    return;
-                  }
-
-                  if (user?.role !== "buyer") {
-                    alert("Only verified buyer accounts can request credits.");
-                    return;
-                  }
-
-                  if (!user.emailVerified || user.kycStatus !== "approved") {
-                    onNavigate("verification");
-                    return;
-                  }
-
-                  setShowModal(true);
-                }}
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
+              {user?.role === "seller" ? (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full mb-3 py-3 rounded-lg text-sm font-semibold border border-[#E5EAF0] bg-[#F8FAFC] text-[#9CA3AF] cursor-not-allowed"
+                  title="Seller accounts are not authorized to request credits."
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M15 15l-2 5L9 9l11 4-5-2zm0 0l5 5"
-                  />
-                </svg>
-                Request This Credit
-              </Button>
+                  Sellers cannot request credits
+                </button>
+              ) : user?.role === "buyer" && user?.kycStatus !== "approved" ? (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full mb-3 py-3 rounded-lg text-sm font-semibold border border-[#FCD34D] bg-[#FFFBEB] text-[#92400E] cursor-not-allowed"
+                  title="Complete business verification before requesting credits."
+                >
+                  Verification required to request
+                </button>
+              ) : (
+                <Button
+                  className="w-full mb-3"
+                  size="lg"
+                  onClick={() => {
+                    if (!user) {
+                      setShowAuthModal(true);
+                      return;
+                    }
+                    setShowModal(true);
+                  }}
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 15l-2 5L9 9l11 4-5-2zm0 0l5 5"
+                    />
+                  </svg>
+                  Request This Credit
+                </Button>
+              )}
 
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => setSaved((s) => !s)}
+                onClick={() => {
+                  if (!user) {
+                    setShowAuthModal(true);
+                    return;
+                  }
+                  setSaved((s) => !s);
+                }}
               >
                 <svg
                   className="w-4 h-4"

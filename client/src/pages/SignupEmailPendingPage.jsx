@@ -17,6 +17,7 @@ function SignupEmailPendingPage({ onNavigate }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [developmentLink, setDevelopmentLink] = useState("");
+  const [hasSentVerification, setHasSentVerification] = useState(false);
 
   useEffect(() => {
     try {
@@ -26,6 +27,7 @@ function SignupEmailPendingPage({ onNavigate }) {
       setEmail(parsed.email || signupSession?.email || "");
       setNewEmail(parsed.email || signupSession?.email || "");
       setDevelopmentLink(parsed.developmentVerificationUrl || "");
+      setHasSentVerification(Boolean(parsed.emailVerificationSent));
     } catch {
       // Ignore malformed development-only session data.
     }
@@ -37,8 +39,17 @@ function SignupEmailPendingPage({ onNavigate }) {
       setError("");
       setSuccess("");
       const response = await resendSignupVerification();
-      setSuccess(response.message || "A new verification email has been sent.");
+      setSuccess(response.message || "A verification email has been sent.");
       setDevelopmentLink(response.developmentVerificationUrl || "");
+      setHasSentVerification(true);
+      sessionStorage.setItem(
+        "signupPendingNotice",
+        JSON.stringify({
+          email,
+          emailVerificationSent: true,
+          developmentVerificationUrl: response.developmentVerificationUrl || "",
+        }),
+      );
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
@@ -64,8 +75,17 @@ function SignupEmailPendingPage({ onNavigate }) {
       setEmail(response.email);
       setNewEmail(response.email);
       setEditingEmail(false);
-      setSuccess(response.message || "Email updated and verification link sent.");
+      setSuccess(response.message || "Email updated. You can now send a verification email.");
       setDevelopmentLink(response.developmentVerificationUrl || "");
+      setHasSentVerification(false);
+      sessionStorage.setItem(
+        "signupPendingNotice",
+        JSON.stringify({
+          email: response.email,
+          emailVerificationSent: false,
+          developmentVerificationUrl: "",
+        }),
+      );
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
@@ -101,13 +121,13 @@ function SignupEmailPendingPage({ onNavigate }) {
             Verify your email address
           </h1>
           <p className="text-sm text-[#6B7280] mt-2 leading-relaxed">
-            Your account has been created, but you are not logged in yet. We
-            sent a verification link to the email below. Open that email and
-            click the verification button to log in automatically.
+            Your account is ready, but your email address must be verified
+            before you can sign in. Use the button below to send a fresh
+            verification link to this address.
           </p>
 
           <div className="mt-6 rounded-xl bg-[#F7F9FB] border border-[#E5EAF0] p-4 text-left">
-            <p className="text-xs text-[#9CA3AF]">Verification email sent to</p>
+            <p className="text-xs text-[#9CA3AF]">Email address to verify</p>
             <p className="text-base font-semibold text-[#374151] break-all mt-1">
               {email || "your email address"}
             </p>
@@ -169,7 +189,11 @@ function SignupEmailPendingPage({ onNavigate }) {
                 onClick={resend}
                 disabled={resending}
               >
-                {resending ? "Sending..." : "Resend Email"}
+                {resending
+                  ? "Sending..."
+                  : hasSentVerification
+                    ? "Resend Verification Email"
+                    : "Send Verification Email"}
               </Button>
             </div>
           )}

@@ -870,6 +870,13 @@ if (previousStatus === "completed" && status === "cancelled") {
   });
 }
 
+if (status === "completed" && paymentStatus !== "received" && previousPaymentStatus !== "received") {
+  return res.status(400).json({
+    success: false,
+    message: "A deal cannot be completed until payment is confirmed as received",
+  });
+}
+
 /*
 |--------------------------------------------------------------------------
 | Do not move ordinary deals backwards
@@ -1332,6 +1339,12 @@ const sellerDeals = deals.map((deal) => ({
 
   commissionAmount: deal.commissionAmount,
 
+  serviceFee: deal.serviceFee,
+
+  creditSubtotal: deal.creditSubtotal,
+
+  finalAmount: deal.finalAmount,
+
   status: deal.status,
 
   paymentStatus: deal.paymentStatus,
@@ -1436,6 +1449,12 @@ const buyerDeals = deals.map((deal) => ({
   commissionRate: deal.commissionRate,
 
   commissionAmount: deal.commissionAmount,
+
+  serviceFee: deal.serviceFee,
+
+  creditSubtotal: deal.creditSubtotal,
+
+  finalAmount: deal.finalAmount,
 
   status: deal.status,
 

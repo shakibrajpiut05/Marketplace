@@ -170,27 +170,18 @@ export const registerUser = async (req, res) => {
 
     const signupSessionToken = await createSignupSessionForUser(user);
 
-    let emailResult = null;
-
-    try {
-      emailResult = await createEmailVerificationForUser(user);
-    } catch (emailError) {
-      console.error("Email verification delivery error:", emailError);
-    }
-
+    // Do not send the verification email automatically. The pending-email
+    // screen gives the user an explicit "Send Verification Email" action.
     return res.status(201).json({
       success: true,
       message:
         "Account created successfully. Please verify your email before logging in.",
-      emailVerificationSent: Boolean(emailResult?.sent),
+      emailVerificationSent: false,
       signupSessionToken,
       email: user.email,
       name: user.name,
       role: user.role,
-      developmentVerificationUrl:
-        process.env.NODE_ENV !== "production"
-          ? emailResult?.verificationUrl || null
-          : null,
+      developmentVerificationUrl: null,
     });
   } catch (error) {
     console.error("Register error:", error);
@@ -276,11 +267,20 @@ export const loginUser = async (req, res) => {
     }
 
     if (user.role !== "admin" && !user.emailVerified) {
+      // The credentials are valid, but the email is not verified yet. Create
+      // a short-lived, restricted signup session so the user can reach the
+      // pending-email page and explicitly request a fresh verification email.
+      const signupSessionToken = await createSignupSessionForUser(user);
+
       return res.status(403).json({
         success: false,
         code: "EMAIL_VERIFICATION_REQUIRED",
-        message:
-          "Please verify your email using the link we sent before logging in.",
+        message: "Your email address is not verified yet.",
+        signupSessionToken,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        emailVerificationSent: false,
       });
     }
 
@@ -666,31 +666,19 @@ export const changeSignupEmail = async (req, res) => {
 
     user.email = normalizedEmail;
     user.emailVerified = false;
-
-    const { rawToken, tokenHash } = createVerificationToken();
-    user.emailVerificationTokenHash = tokenHash;
-    user.emailVerificationExpires = new Date(
-      Date.now() + 24 * 60 * 60 * 1000,
-    );
+    // Invalidate any previous verification link. The user can explicitly
+    // request a fresh link with the Send Verification Email button.
+    user.emailVerificationTokenHash = null;
+    user.emailVerificationExpires = null;
 
     await user.save();
-
-    const emailResult = await sendEmailVerification({
-      email: user.email,
-      name: user.name,
-      token: rawToken,
-    });
 
     return res.status(200).json({
       success: true,
       email: user.email,
-      message: emailResult.sent
-        ? "Email updated. A new verification link has been sent."
-        : "Email updated, but verification email delivery is not configured.",
-      developmentVerificationUrl:
-        process.env.NODE_ENV !== "production"
-          ? emailResult.verificationUrl
-          : null,
+      message: "Email updated. You can now send a verification email.",
+      emailVerificationSent: false,
+      developmentVerificationUrl: null,
     });
   } catch (error) {
     console.error("Change signup email error:", error);

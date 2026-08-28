@@ -74,6 +74,25 @@ const dealSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // EPR Nexus fee is manually determined per transaction.
+    serviceFee: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    creditSubtotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    finalAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     status: {
       type: String,
       enum: [

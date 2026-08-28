@@ -3,13 +3,31 @@ import api from "../services/api.js";
 import { Button } from "../components/ui";
 import { useAuth } from "../context/AuthContext.jsx";
 
+// Keep one in-flight verification request per token. This prevents React
+// StrictMode from issuing two one-time verification requests in development.
+const verificationRequests = new Map();
+
+const getVerificationRequest = (token) => {
+  if (!verificationRequests.has(token)) {
+    const request = api.get(
+      `/auth/verify-email?token=${encodeURIComponent(token)}`,
+    ).finally(() => {
+      verificationRequests.delete(token);
+    });
+
+    verificationRequests.set(token, request);
+  }
+
+  return verificationRequests.get(token);
+};
+
 function EmailVerificationPage({ token, onNavigate }) {
   const { loginFromEmailVerification } = useAuth();
   const [status, setStatus] = useState("verifying");
   const [message, setMessage] = useState("Verifying your email address...");
-
+  
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
 
     const verify = async () => {
       if (!token) {
@@ -19,19 +37,31 @@ function EmailVerificationPage({ token, onNavigate }) {
       }
 
       try {
-        const response = await api.get(
-          `/auth/verify-email?token=${encodeURIComponent(token)}`,
-        );
+        /*
+         * IMPORTANT: React StrictMode runs effects twice in development.
+         * The backend verification token is intentionally one-time-use.
+         * We therefore share the in-flight request for the same token instead
+         * of making a second request and accidentally consuming the token twice.
+         */
+        const response = await getVerificationRequest(token);
 
-        if (!active) return;
+        if (cancelled) return;
 
         if (response.data.success) {
           loginFromEmailVerification(response.data);
           setStatus("success");
           setMessage(response.data.message);
+          return;
         }
+
+        setStatus("error");
+        setMessage(
+          response.data.message ||
+            "This verification link is invalid or has expired.",
+        );
       } catch (error) {
-        if (!active) return;
+        if (cancelled) return;
+
         setStatus("error");
         setMessage(
           error.response?.data?.message ||
@@ -43,7 +73,7 @@ function EmailVerificationPage({ token, onNavigate }) {
     verify();
 
     return () => {
-      active = false;
+      cancelled = true;
     };
   }, [token]);
 

@@ -3,7 +3,10 @@ import mongoose from "mongoose";
 import PurchaseRequest from "../models/PurchaseRequest.js";
 import SellerListing from "../models/SellerListing.js";
 import Deal from "../models/Deal.js";
-import { notifyDealStatusChange } from "../services/notification.service.js";
+import {
+  createNotification,
+  notifyDealStatusChange,
+} from "../services/notification.service.js";
 import { createActivityLog } from "../services/activityLog.service.js";
 
 export const createPurchaseRequest = async (req, res) => {
@@ -110,6 +113,25 @@ export const createPurchaseRequest = async (req, res) => {
       phone: phone.trim(),
       notes: notes?.trim() || "",
       status: "pending",
+    });
+
+    const admin = await (await import("../models/User.js")).default.findOne({
+      role: "admin",
+      isActive: true,
+    }).select("_id").lean();
+
+    await createNotification({
+      recipient: admin?._id,
+      actor: req.user._id,
+      type: "purchase_request_created",
+      title: "New buyer credit request",
+      message: `A buyer requested ${parsedQuantity} MT of ${listing.category || "EPR credits"}. Open the quotation section to review and respond.`,
+      entityType: "request",
+      entityId: purchaseRequest._id,
+      metadata: {
+        quantity: parsedQuantity,
+        category: listing.category,
+      },
     });
 
     return res.status(201).json({
@@ -228,8 +250,9 @@ export const reviewPurchaseRequest = async (req, res) => {
         }
 
         const quantity = Number(request.quantity);
-        const agreedPrice = Number(listing.price);
-        const commissionRate = 2;
+        const agreedPrice = Number(request.offer?.creditPricePerUnit);
+        const commissionRate = 0;
+        const commissionAmount = Number(request.offer?.serviceFee);
 
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return res.status(400).json({
@@ -238,11 +261,16 @@ export const reviewPurchaseRequest = async (req, res) => {
           });
         }
 
-        if (!Number.isFinite(agreedPrice) || agreedPrice <= 0) {
-          return res.status(400).json({
-            success: false,
-            message: "Listing has invalid price",
-          });
+        if (!Number.isFinite(agreedPrice) || agreedPrice < 0) {
+          return res.status(400).json({ success: false, message: "The accepted offer has an invalid credit price" });
+        }
+
+        if (!Number.isFinite(commissionAmount) || commissionAmount < 0) {
+          return res.status(400).json({ success: false, message: "The accepted offer has an invalid EPR Nexus service fee" });
+        }
+
+        if (request.status !== "approved" || !request.offer?.acceptedAt) {
+          return res.status(400).json({ success: false, message: "The buyer must accept an EPR Nexus offer before the deal can be approved" });
         }
 
         if (quantity > Number(listing.quantity)) {
@@ -253,8 +281,7 @@ export const reviewPurchaseRequest = async (req, res) => {
         }
 
         const totalValue = quantity * agreedPrice;
-
-        const commissionAmount = (totalValue * commissionRate) / 100;
+        const finalAmount = totalValue + commissionAmount;
 
         const deal = await Deal.create({
           requestId: request._id,
@@ -267,6 +294,9 @@ export const reviewPurchaseRequest = async (req, res) => {
           agreedPrice,
           commissionRate,
           commissionAmount,
+          serviceFee: commissionAmount,
+          creditSubtotal: totalValue,
+          finalAmount,
           status: "matched",
           paymentStatus: "pending",
           inventoryReserved: false,
@@ -342,8 +372,7 @@ export const getSellerPurchaseRequests = async (req, res) => {
         _id: request._id,
 
         buyer: {
-          company:
-            request.companyName || request.buyerId?.company || "Verified Buyer",
+          company: "Verified Buyer",
         },
 
         listing: {
@@ -365,6 +394,7 @@ export const getSellerPurchaseRequests = async (req, res) => {
         createdAt: request.createdAt,
 
         rejectionReason: request.rejectionReason || "",
+        offer: request.offer || null,
       }));
 
     return res.status(200).json({
@@ -420,6 +450,8 @@ export const getBuyerPurchaseRequests = async (req, res) => {
       status: request.status,
 
       rejectionReason: request.rejectionReason || "",
+
+      offer: request.offer || null,
 
       createdAt: request.createdAt,
     }));

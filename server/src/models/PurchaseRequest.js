@@ -70,6 +70,8 @@ const purchaseRequestSchema = new mongoose.Schema(
         "reviewing",
         "matched",
         "negotiating",
+        "offer_sent",
+        "offer_accepted",
         "approved",
         "rejected",
         "completed",
@@ -84,6 +86,39 @@ const purchaseRequestSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+
+    // Commercial terms are controlled by EPR Nexus per request.
+    offer: {
+      creditPricePerUnit: { type: Number, default: null, min: 0 },
+      creditSubtotal: { type: Number, default: null, min: 0 },
+      serviceFee: { type: Number, default: null, min: 0 },
+      finalAmount: { type: Number, default: null, min: 0 },
+      currency: { type: String, default: "INR" },
+      version: { type: Number, default: 0, min: 0 },
+      sentAt: { type: Date, default: null },
+      acceptedAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
+      lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      note: { type: String, trim: true, default: "" },
+    },
+
+    // Immutable record of every quotation issued by EPR Nexus.
+    // Buyers never create quotation versions themselves; only Admin does.
+    offerHistory: [
+      {
+        version: { type: Number, required: true, min: 1 },
+        creditPricePerUnit: { type: Number, required: true, min: 0 },
+        creditSubtotal: { type: Number, required: true, min: 0 },
+        serviceFee: { type: Number, required: true, min: 0 },
+        finalAmount: { type: Number, required: true, min: 0 },
+        currency: { type: String, default: "INR" },
+        sentAt: { type: Date, required: true },
+        expiresAt: { type: Date, default: null },
+        note: { type: String, trim: true, default: "" },
+        issuedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        acceptedAt: { type: Date, default: null },
+      },
+    ],
   },
   {
     timestamps: true,

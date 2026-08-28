@@ -13,11 +13,12 @@ const formatTime = (value) => {
   return date.toLocaleDateString();
 };
 
-export function NotificationBell({ compact = false }) {
+export function NotificationBell({ compact = false, onNavigate }) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
   const ref = useRef(null);
 
   const fetchNotifications = async () => {
@@ -80,9 +81,12 @@ export function NotificationBell({ compact = false }) {
           <div className="px-4 py-3 border-b border-[#E5EAF0] flex items-center justify-between"><div><p className="font-semibold text-[#0F1923]">Notifications</p><p className="text-[11px] text-[#9CA3AF]">Important account and marketplace updates</p></div>{unreadCount > 0 && <button type="button" onClick={markAllRead} className="text-xs font-semibold text-[#3EA646] hover:underline">Mark all read</button>}</div>
           <div className="max-h-[420px] overflow-y-auto">
             {loading && !notifications.length ? <div className="px-5 py-10 text-center text-sm text-[#6B7280]">Loading notifications...</div> : !notifications.length ? <div className="px-5 py-10 text-center"><p className="text-sm font-medium text-[#374151]">No notifications</p><p className="text-xs text-[#9CA3AF] mt-1">You're all caught up.</p></div> : notifications.map((item) => (
-              <button type="button" key={item._id} onClick={() => !item.read && markRead(item._id)} className={`w-full text-left px-4 py-3 border-b border-[#F0F4F8] hover:bg-[#F8FAFC] ${!item.read ? "bg-[#F0FBF1]" : "bg-white"}`}>
-                <div className="flex gap-3"><div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${item.read ? "bg-[#CBD5E1]" : "bg-[#5AC361]"}`} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><p className="text-sm font-semibold text-[#0F1923]">{item.title}</p><span className="text-[10px] text-[#9CA3AF] whitespace-nowrap">{formatTime(item.createdAt)}</span></div><p className="text-xs text-[#6B7280] mt-1 leading-relaxed">{item.message}</p></div></div>
-              </button>
+              <div key={item._id} className={`px-4 py-3 border-b border-[#F0F4F8] hover:bg-[#F8FAFC] ${!item.read ? "bg-[#F0FBF1]" : "bg-white"}`}>
+                <button type="button" onClick={() => markRead(item._id)} className="w-full text-left">
+                  <div className="flex gap-3"><div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${item.read ? "bg-[#CBD5E1]" : "bg-[#5AC361]"}`} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><p className="text-sm font-semibold text-[#0F1923]">{item.title}</p><span className="text-[10px] text-[#9CA3AF] whitespace-nowrap">{formatTime(item.createdAt)}</span></div><p className="text-xs text-[#6B7280] mt-1 leading-relaxed">{item.message}</p></div></div>
+                </button>
+                {item.entityType === "request" && onNavigate && <button type="button" onClick={() => { markRead(item._id); setOpen(false); onNavigate(user?.role === "admin" ? "admin-dashboard" : `${user?.role}-dashboard`); }} className="ml-5 mt-2 text-xs font-bold text-[#3EA646] hover:underline">Open conversation →</button>}
+              </div>
             ))}
           </div>
         </div>
@@ -100,7 +104,6 @@ export function AdminProfileMenu({ onNavigate, compact = false }) {
     const handleOutside = (event) => {
       if (ref.current && !ref.current.contains(event.target)) setOpen(false);
     };
-
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
@@ -113,90 +116,18 @@ export function AdminProfileMenu({ onNavigate, compact = false }) {
 
   return (
     <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className={`${compact ? "px-2" : "px-2.5"} py-1.5 rounded-lg hover:bg-[#F7F9FB] transition-colors flex items-center gap-2 max-w-52`}
-      >
-        <span className="w-7 h-7 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center text-xs font-bold">
-          {(user?.name || "A").slice(0, 1).toUpperCase()}
-        </span>
-        <span className="hidden sm:block text-sm font-semibold text-[#374151] truncate">
-          {user?.name || "Admin"}
-        </span>
-        <svg
-          className="w-4 h-4 text-[#9CA3AF]"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.7}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
-        </svg>
+      <button type="button" onClick={() => setOpen((value) => !value)} className="px-2 py-1.5 rounded-lg hover:bg-[#F7F9FB] flex items-center gap-2">
+        <span className="w-8 h-8 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center text-xs font-bold">{(user?.name || "A").slice(0, 1).toUpperCase()}</span>
+        <span className="hidden sm:block text-sm font-semibold text-[#374151] max-w-28 truncate">{user?.name || "Admin"}</span>
+        <svg className="w-4 h-4 text-[#9CA3AF]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" /></svg>
       </button>
-
       {open && (
-        <div className="absolute right-0 mt-2 w-[320px] max-w-[calc(100vw-2rem)] bg-white border border-[#E5EAF0] rounded-2xl shadow-2xl z-[80] overflow-hidden">
-          <div className="px-5 py-4 bg-[#F8FAFC] border-b border-[#E5EAF0]">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center font-bold">
-                {(user?.name || "A").slice(0, 1).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-[#0F1923] truncate">
-                  {user?.name || "Admin"}
-                </p>
-                <p className="text-xs text-[#6B7280]">Administrator account</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-5 space-y-4">
-            <div className="rounded-xl border border-[#D8E8DA] bg-[#F4FBF5] px-4 py-3">
-              <p className="text-sm font-semibold text-[#2E7D32]">Platform Administrator</p>
-              <p className="text-xs text-[#52715A] mt-1 leading-relaxed">
-                This account is provisioned by EPR Nexus and does not require customer email, phone, or business verification.
-              </p>
-            </div>
-
-            <div>
-              <p className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
-                Email
-              </p>
-              <div className="mt-1 w-full rounded-lg border border-[#E5EAF0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#6B7280] break-all">
-                {user?.email || "—"}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-lg bg-[#F8FAFC] border border-[#E5EAF0] px-3 py-2">
-                <p className="text-[#9CA3AF]">Access</p>
-                <p className="font-semibold text-[#374151] mt-0.5">Full admin</p>
-              </div>
-              <div className="rounded-lg bg-[#F8FAFC] border border-[#E5EAF0] px-3 py-2">
-                <p className="text-[#9CA3AF]">Security</p>
-                <p className="font-semibold text-[#374151] mt-0.5">Platform managed</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onNavigate?.("admin-dashboard");
-              }}
-              className="w-full py-2.5 bg-[#5AC361] text-white rounded-lg text-sm font-semibold hover:bg-[#3EA646]"
-            >
-              Open Admin Dashboard
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="w-full py-2.5 text-[#991B1B] bg-[#FEF2F2] rounded-lg text-sm font-semibold hover:bg-[#FEE2E2]"
-            >
-              Logout
-            </button>
+        <div className="absolute right-0 mt-2 w-[280px] max-w-[calc(100vw-1rem)] bg-white border border-[#E5EAF0] rounded-xl shadow-xl z-[90] overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#E5EAF0] bg-[#F8FAFC]"><p className="font-semibold text-sm text-[#0F1923]">{user?.name || "Admin"}</p><p className="text-xs text-[#6B7280]">Administrator</p></div>
+          <div className="p-3 space-y-2.5">
+            <div><p className="text-[10px] uppercase tracking-wide font-semibold text-[#9CA3AF]">Email</p><p className="text-sm text-[#374151] break-all mt-1">{user?.email || "—"}</p></div>
+            <div className="rounded-lg bg-[#F0FBF1] border border-[#CFE8D1] px-3 py-2"><p className="text-xs font-semibold text-[#2E7D32]">Platform admin</p><p className="text-[11px] text-[#52715A] mt-0.5">No customer verification is required.</p></div>
+            <button type="button" onClick={handleLogout} className="w-full py-2 bg-[#FEF2F2] text-[#991B1B] rounded-lg text-sm font-semibold">Logout</button>
           </div>
         </div>
       )}
@@ -251,19 +182,18 @@ export function ProfileMenu({ onNavigate, compact = false }) {
         <svg className="w-4 h-4 text-[#9CA3AF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" /></svg>
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-[340px] max-w-[calc(100vw-2rem)] bg-white border border-[#E5EAF0] rounded-2xl shadow-2xl z-[80] overflow-hidden">
-          <div className="px-5 py-4 bg-[#F8FAFC] border-b border-[#E5EAF0]"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center font-bold">{(user?.name || "U").slice(0, 1).toUpperCase()}</div><div className="min-w-0"><p className="font-semibold text-[#0F1923] truncate">{user?.name || "User"}</p><p className="text-xs text-[#6B7280] capitalize">{user?.role || "user"} account</p></div></div></div>
-          <div className="p-5 space-y-4">
+        <div className="absolute right-0 mt-2 w-[290px] max-w-[calc(100vw-1rem)] bg-white border border-[#E5EAF0] rounded-xl shadow-xl z-[80] overflow-hidden">
+          <div className="px-4 py-3 bg-[#F8FAFC] border-b border-[#E5EAF0]"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center font-bold">{(user?.name || "U").slice(0, 1).toUpperCase()}</div><div className="min-w-0"><p className="font-semibold text-[#0F1923] truncate">{user?.name || "User"}</p><p className="text-xs text-[#6B7280] capitalize">{user?.role || "user"} account</p></div></div></div>
+          <div className="p-3.5 space-y-3">
             {error && <div className="text-xs text-[#991B1B] bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-2.5">{error}</div>}
-            <div className="space-y-3">
-              <label className="block"><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Name</span><input value={name} onChange={(event) => setName(event.target.value)} disabled={!editing} className="mt-1 w-full rounded-lg border border-[#E5EAF0] px-3 py-2 text-sm outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC]" /></label>
-              <label className="block"><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Phone</span><input value={phone} onChange={(event) => setPhone(event.target.value)} disabled={!editing} className="mt-1 w-full rounded-lg border border-[#E5EAF0] px-3 py-2 text-sm outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC]" /></label>
+            <div className="space-y-2.5">
+              <label className="block"><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Name</span><input value={name} onChange={(event) => setName(event.target.value)} disabled={!editing} className="mt-1 w-full rounded-lg border border-[#E5EAF0] px-3 py-1.5 text-sm outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC]" /></label>
+              <label className="block"><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Phone</span><input value={phone} onChange={(event) => setPhone(event.target.value)} disabled={!editing} className="mt-1 w-full rounded-lg border border-[#E5EAF0] px-3 py-1.5 text-sm outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC]" /></label>
               <div><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Email</span><div className="mt-1 w-full rounded-lg border border-[#E5EAF0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#6B7280] break-all">{user?.email || "—"}</div><p className="text-[10px] text-[#9CA3AF] mt-1">Email cannot be changed from your profile.</p></div>
             </div>
-            <div className={`rounded-xl border px-3.5 py-3 ${toneClasses[status.tone]}`}><p className="text-sm font-semibold">{status.label}</p><p className="text-xs mt-1 leading-relaxed">{status.detail}</p>{user?.role !== "admin" && user?.kycStatus !== "approved" && <button type="button" onClick={() => { setOpen(false); onNavigate?.("verification"); }} className="mt-2 text-xs font-bold underline">{user?.kycStatus === "rejected" ? "Re-upload documents" : user?.kycSubmittedAt ? "View verification status" : "Upload documents to verify"}</button>}</div>
-            {editing ? <div className="flex gap-2"><button type="button" onClick={() => { setEditing(false); setError(""); }} className="flex-1 py-2 border border-[#E5EAF0] rounded-lg text-sm">Cancel</button><button type="button" onClick={save} disabled={saving || !name.trim() || !phone.trim()} className="flex-1 py-2 bg-[#5AC361] text-white rounded-lg text-sm font-semibold disabled:opacity-50">{saving ? "Saving..." : "Save changes"}</button></div> : <button type="button" onClick={() => setEditing(true)} className="w-full py-2 border border-[#E5EAF0] rounded-lg text-sm font-semibold text-[#374151] hover:bg-[#F7F9FB]">Edit profile</button>}
-            <button type="button" onClick={() => { setOpen(false); onNavigate?.(`${user?.role}-dashboard`); }} className="w-full py-2 bg-[#5AC361] text-white rounded-lg text-sm font-semibold">Open Dashboard</button>
-            <button type="button" onClick={() => { logout(); setOpen(false); onNavigate?.("home"); }} className="w-full py-2 text-[#991B1B] bg-[#FEF2F2] rounded-lg text-sm font-semibold">Logout</button>
+            <div className={`rounded-lg border px-3 py-2.5 ${toneClasses[status.tone]}`}><p className="text-sm font-semibold">{status.label}</p><p className="text-xs mt-1 leading-relaxed">{status.detail}</p>{user?.role !== "admin" && user?.kycStatus !== "approved" && <button type="button" onClick={() => { setOpen(false); onNavigate?.("verification"); }} className="mt-2 text-xs font-bold underline">{user?.kycStatus === "rejected" ? "Re-upload documents" : user?.kycSubmittedAt ? "View verification status" : "Upload documents to verify"}</button>}</div>
+            {editing ? <div className="flex gap-2"><button type="button" onClick={() => { setEditing(false); setError(""); }} className="flex-1 py-2 border border-[#E5EAF0] rounded-lg text-sm">Cancel</button><button type="button" onClick={save} disabled={saving || !name.trim() || !phone.trim()} className="flex-1 py-2 bg-[#5AC361] text-white rounded-lg text-sm font-semibold disabled:opacity-50">{saving ? "Saving..." : "Save changes"}</button></div> : <button type="button" onClick={() => setEditing(true)} className="w-full py-1.5 border border-[#E5EAF0] rounded-lg text-sm font-semibold text-[#374151] hover:bg-[#F7F9FB]">Edit profile</button>}
+            <button type="button" onClick={() => { logout(); setOpen(false); onNavigate?.("home"); }} className="w-full py-1.5 text-[#991B1B] bg-[#FEF2F2] rounded-lg text-sm font-semibold">Logout</button>
           </div>
         </div>
       )}

@@ -48,11 +48,8 @@ const userSchema = new mongoose.Schema(
 
     phone: {
       type: String,
-      required: function () {
-        return this.role !== "admin";
-      },
+      required: [true, "Phone number is required"],
       trim: true,
-      default: "",
     },
 
     emailVerified: {

@@ -3,7 +3,6 @@ import express from "express";
 import {
   protect,
 } from "../middleware/auth.middleware.js";
-import { requireVerifiedUser } from "../middleware/verifiedUser.middleware.js";
 
 import {
   authorize,
@@ -16,6 +15,14 @@ import {
   getSellerPurchaseRequests,
   getBuyerPurchaseRequests,
 } from "../controllers/request.controller.js";
+import {
+  getAdminNegotiations,
+  getMessageUnreadCount,
+  getNegotiationMessages,
+  sendNegotiationMessage,
+  setAdminOffer,
+  acceptAdminOffer,
+} from "../controllers/negotiation.controller.js";
 
 const router = express.Router();
 
@@ -23,7 +30,6 @@ const router = express.Router();
 router.post(
   "/",
   protect,
-  requireVerifiedUser,
   authorize("buyer"),
   createPurchaseRequest
 );
@@ -49,6 +55,14 @@ router.get(
   authorize("buyer"),
   getBuyerPurchaseRequests
 );
+
+// Admin negotiation center
+router.get("/admin/negotiations", protect, authorize("admin"), getAdminNegotiations);
+router.get("/messages/unread-count", protect, getMessageUnreadCount);
+router.get("/:requestId/messages", protect, getNegotiationMessages);
+router.post("/:requestId/messages", protect, sendNegotiationMessage);
+router.patch("/admin/:requestId/offer", protect, authorize("admin"), setAdminOffer);
+router.post("/:requestId/accept-offer", protect, authorize("buyer"), acceptAdminOffer);
 
 // Admin reviews request
 router.patch(

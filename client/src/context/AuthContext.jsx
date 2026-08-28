@@ -103,6 +103,21 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
+  const startSignupSession = (data) => {
+    if (!data?.signupSessionToken) return null;
+
+    const session = {
+      token: data.signupSessionToken,
+      email: data.email || "",
+      name: data.name || "",
+      role: data.role || "buyer",
+    };
+
+    sessionStorage.setItem("epr_signup_session", JSON.stringify(session));
+    setSignupSession(session);
+    return session;
+  };
+
   const register = async (userData) => {
     const response = await api.post("/auth/register", userData);
 
@@ -201,6 +216,7 @@ export const AuthProvider = ({ children }) => {
         pendingGoogleSignup,
         setPendingGoogleSignup,
         register,
+        startSignupSession,
         signupSession,
         resendVerification,
         resendSignupVerification,

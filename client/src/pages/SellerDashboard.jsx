@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+
 import api from "../services/api.js";
-import { useAuth } from "../context/AuthContext.jsx";
 import { NotificationBell, ProfileMenu } from "../components/AccountTools.jsx";
 import { Badge, Button, Card, StatCard, Table, Tr, Td } from "../components/ui";
+import { MessageChat } from "../components/MessageCenter.jsx";
+import { useEffect, useMemo, useState } from "react";
 const NAV = [
   {
     id: "dashboard",
@@ -139,7 +140,6 @@ const NAV = [
   },
 ];
 function SellerDashboard({ onNavigate }) {
-  const { user } = useAuth();
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [purchaseRequests, setPurchaseRequests] = useState([]);
@@ -148,6 +148,30 @@ function SellerDashboard({ onNavigate }) {
   const [sellerDeals, setSellerDeals] = useState([]);
   const [dealLoading, setDealLoading] = useState(true);
   const [dealError, setDealError] = useState("");
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [messageUnreadByRequest, setMessageUnreadByRequest] = useState({});
+
+  const fetchMessageUnread = async () => {
+    try {
+      const response = await api.get("/requests/messages/unread-count");
+      if (response.data.success) {
+        setMessageUnreadCount(Number(response.data.unreadCount || 0));
+        setMessageUnreadByRequest(response.data.byRequest || {});
+      }
+    } catch (error) {
+      console.error("Failed to fetch message unread count:", error);
+    }
+  };
+
+  const markRequestMessagesRead = (requestId) => {
+    const count = Number(messageUnreadByRequest[String(requestId)] || 0);
+    setMessageUnreadByRequest((current) => {
+      const next = { ...current };
+      delete next[String(requestId)];
+      return next;
+    });
+    setMessageUnreadCount((current) => Math.max(0, current - count));
+  };
 
   const fetchSellerDeals = async () => {
     try {
@@ -194,7 +218,12 @@ function SellerDashboard({ onNavigate }) {
   useEffect(() => {
     fetchPurchaseRequests();
     fetchSellerDeals();
-  }, []);
+  }, [])
+  useEffect(() => {
+    fetchMessageUnread();
+    const interval = window.setInterval(fetchMessageUnread, 10000);
+    return () => window.clearInterval(interval);
+  }, []);;
 
   const [sellerListings, setSellerListings] = useState([]);
   const [listingLoading, setListingLoading] = useState(true);
@@ -243,6 +272,20 @@ function SellerDashboard({ onNavigate }) {
     () => sellerListings.filter((listing) => listing.status === "rejected"),
     [sellerListings],
   );
+
+  // Only count unread messages that belong to requests actually visible
+  // to this seller. This prevents stale/unrelated unread records from
+  // showing a badge such as "5" when there are no conversations.
+  const visibleUnreadCount = useMemo(
+    () =>
+      purchaseRequests.reduce(
+        (total, request) =>
+          total + Number(messageUnreadByRequest[String(request._id)] || 0),
+        0,
+      ),
+    [purchaseRequests, messageUnreadByRequest],
+  );
+
   return (
     <div className="min-h-screen bg-[#F7F9FB] flex">
       {/* Sidebar */}
@@ -303,8 +346,18 @@ function SellerDashboard({ onNavigate }) {
               }}
               className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${active === n.id ? "bg-[#EBF8EC] text-[#2E7D32]" : "text-[#6B7280] hover:bg-[#F7F9FB] hover:text-[#374151]"}`}
             >
-              {n.icon}
-              {n.label}
+              <span className="flex items-center gap-2.5">{n.icon}{n.label}</span>
+              {n.id === "messages" && visibleUnreadCount > 0 && (
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    active === n.id
+                      ? "bg-white/60 text-[#2E7D32]"
+                      : "bg-[#EF4444] text-white"
+                  }`}
+                >
+                  {visibleUnreadCount > 99 ? "99+" : visibleUnreadCount}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -327,7 +380,7 @@ function SellerDashboard({ onNavigate }) {
                 d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
               />
             </svg>
-            Logout
+            Home
           </button>
         </div>
       </aside>
@@ -370,9 +423,10 @@ function SellerDashboard({ onNavigate }) {
               {NAV.find((n) => n.id === active)?.label ?? "Dashboard"}
             </h1>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <NotificationBell compact />
-            <ProfileMenu onNavigate={onNavigate} compact />
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => onNavigate("home")}>Home</Button>
+            <NotificationBell compact onNavigate={onNavigate} />
+            <ProfileMenu compact onNavigate={onNavigate} />
             <Button size="sm" onClick={() => onNavigate("add-listing")}>
             <svg
               className="w-4 h-4"
@@ -737,6 +791,10 @@ function SellerDashboard({ onNavigate }) {
                             <Badge label={request.status} />
                           </div>
 
+                          <div className="mb-4">
+                            <MessageChat requestId={request._id} role="seller" compact onRead={markRequestMessagesRead} />
+                          </div>
+
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                             <div>
                               <p className="text-xs text-[#9CA3AF]">Buyer</p>
@@ -856,7 +914,7 @@ function SellerDashboard({ onNavigate }) {
                             <div className="mt-4 p-3 bg-[#EBF8EC] rounded-lg">
                               <p className="text-xs text-[#2E7D32] leading-relaxed">
                                 EPR Nexus manages buyer-seller communication and
-                                negotiation. Direct buyer contact details are
+                                communication. Direct buyer contact details are
                                 kept confidential.
                               </p>
                             </div>
@@ -975,13 +1033,18 @@ function SellerDashboard({ onNavigate }) {
                               </div>
 
                               <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Transaction Value
-                                </p>
+                                <p className="text-xs text-[#9CA3AF] mb-1">Credit Value</p>
+                                <p className="font-semibold text-[#5AC361]">₹{Number(deal.creditSubtotal ?? estimatedValue).toLocaleString("en-IN")}</p>
+                              </div>
 
-                                <p className="font-semibold text-[#5AC361]">
-                                  ₹{estimatedValue.toLocaleString("en-IN")}
-                                </p>
+                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
+                                <p className="text-xs text-[#9CA3AF] mb-1">EPR Nexus Fee</p>
+                                <p className="font-medium text-[#374151]">₹{Number(deal.serviceFee ?? deal.commissionAmount ?? 0).toLocaleString("en-IN")}</p>
+                              </div>
+
+                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
+                                <p className="text-xs text-[#9CA3AF] mb-1">Buyer Total</p>
+                                <p className="font-semibold text-[#0F1923]">₹{Number(deal.finalAmount ?? (estimatedValue + Number(deal.serviceFee ?? deal.commissionAmount ?? 0))).toLocaleString("en-IN")}</p>
                               </div>
 
                               <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
@@ -1015,30 +1078,13 @@ function SellerDashboard({ onNavigate }) {
 
                               <div className="flex items-center gap-1 overflow-x-auto">
                                 {[
-                                  {
-                                    key: "matched",
-                                    label: "Matched",
-                                  },
-                                  {
-                                    key: "negotiating",
-                                    label: "Negotiating",
-                                  },
-                                  {
-                                    key: "terms_agreed",
-                                    label: "Terms Agreed",
-                                  },
-                                  {
-                                    key: "payment_coordination",
-                                    label: "Payment Coordination",
-                                  },
-                                  {
-                                    key: "completed",
-                                    label: "Completed",
-                                  },
+                                  { key: "matched", label: "Matched" },
+                                  { key: "terms_agreed", label: "Quotation Accepted" },
+                                  { key: "payment_coordination", label: "Payment Coordination" },
+                                  { key: "completed", label: "Completed" },
                                 ].map((stage, index, stages) => {
                                   const order = [
                                     "matched",
-                                    "negotiating",
                                     "terms_agreed",
                                     "payment_coordination",
                                     "completed",
@@ -1128,35 +1174,92 @@ function SellerDashboard({ onNavigate }) {
             </Card>
           )}
 
-          {(active === "messages" ||
-            active === "documents" ||
-            active === "profile") && (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="w-14 h-14 rounded-full bg-[#F0F4F8] flex items-center justify-center text-[#9CA3AF] mb-3">
-                <svg
-                  className="w-7 h-7"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                  />
-                </svg>
+          {active === "messages" && (
+            <Card>
+              <div className="px-5 py-4 border-b border-[#E5EAF0]"><h2 className="font-semibold text-[#0F1923]">Messages</h2><p className="text-xs text-[#9CA3AF] mt-1">Private communication with EPR Nexus. Quotations are handled by EPR Nexus and are not part of Messages.</p></div>
+              {purchaseRequests.length === 0 ? (
+                <div className="py-16 text-center text-sm text-[#9CA3AF]">
+                  No conversations yet.
+                </div>
+              ) : (
+                <div className="divide-y divide-[#E5EAF0]">
+                  {purchaseRequests.map((request) => {
+                    const unread = Number(
+                      messageUnreadByRequest[String(request._id)] || 0,
+                    );
+
+                    return (
+                      <div
+                        key={request._id}
+                        className={`p-5 flex items-center justify-between gap-4 border-l-4 ${
+                          unread
+                            ? "border-l-[#EF4444] bg-[#FEF2F2]"
+                            : "border-l-transparent"
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-[#0F1923]">
+                              {request.listing?.category || "Credit request"}
+                            </p>
+                            {unread > 0 && (
+                              <span
+                                className="w-2 h-2 rounded-full bg-[#EF4444]"
+                                title="Unread messages"
+                              />
+                            )}
+                          </div>
+                          <p className="text-xs text-[#6B7280] mt-1">
+                            {request.requestedQuantity || request.quantity || 0} MT ·{" "}
+                            {unread
+                              ? `${unread} unread message${
+                                  unread === 1 ? "" : "s"
+                                }`
+                              : "No unread messages"}
+                          </p>
+                        </div>
+                        <MessageChat
+                          requestId={request._id}
+                          role="seller"
+                          compact
+                          onRead={markRequestMessagesRead}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {active === "documents" && (
+            <Card>
+              <div className="px-5 py-4 border-b border-[#E5EAF0]">
+                <h2 className="font-semibold text-[#0F1923]">Documents</h2>
+                <p className="text-xs text-[#9CA3AF] mt-1">Manage the documents used for EPR Nexus verification.</p>
               </div>
-              <p
-                className="font-semibold text-[#374151]"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {NAV.find((n) => n.id === active)?.label}
-              </p>
-              <p className="text-sm text-[#9CA3AF] mt-1">
-                This section will appear when you have activity.
-              </p>
-            </div>
+              <div className="p-5">
+                <div className="rounded-xl border border-[#E5EAF0] bg-[#F7F9FB] p-4">
+                  <p className="text-sm font-semibold text-[#374151]">Business verification</p>
+                  <p className="text-sm text-[#6B7280] mt-1">Your verification documents are reviewed by EPR Nexus administrators.</p>
+                  <Button className="mt-4" onClick={() => onNavigate("verification")}>Open Verification</Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {active === "profile" && (
+            <Card>
+              <div className="px-5 py-4 border-b border-[#E5EAF0]">
+                <h2 className="font-semibold text-[#0F1923]">Profile</h2>
+                <p className="text-xs text-[#9CA3AF] mt-1">Manage your seller account from the profile menu.</p>
+              </div>
+              <div className="p-5">
+                <div className="rounded-xl border border-[#E5EAF0] bg-[#F7F9FB] p-4">
+                  <p className="text-sm text-[#6B7280]">Use the profile menu in the top navigation to view your account details and verification status.</p>
+                </div>
+              </div>
+            </Card>
           )}
         </div>
       </main>

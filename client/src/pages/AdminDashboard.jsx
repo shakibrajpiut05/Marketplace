@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import api from "../services/api.js";
-import { useAuth } from "../context/AuthContext.jsx";
 import { NotificationBell, AdminProfileMenu } from "../components/AccountTools.jsx";
+import QuotationCenter from "../components/QuotationCenter.jsx";
+import ManagedMessagesPage from "./ManagedMessagesPage.jsx";
+import api from "../services/api.js";
 import {
   Badge,
   Button,
@@ -15,6 +16,7 @@ import {
 const NAV = [
   { id: "dashboard", label: "Dashboard" },
   { id: "requests", label: "Purchase Requests" },
+  { id: "quotations", label: "Quotations" },
   { id: "listings", label: "Seller Listings" },
   {
     id: "verification",
@@ -86,6 +88,11 @@ function NavIcon({ id }) {
           strokeLinejoin="round"
           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
         />
+      </svg>
+    ),
+    quotations: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 3h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zm3 4h4m-6 4h8m-8 4h5" />
       </svg>
     ),
     deals: (
@@ -442,7 +449,6 @@ function VerificationQueue({ kycDocuments, kycLoading, kycError, reviewKyc }) {
 }
 
 function AdminDashboard({ onNavigate }) {
-  const { user, logout } = useAuth();
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [kycDocuments, setKycDocuments] = useState([]);
@@ -457,6 +463,8 @@ function AdminDashboard({ onNavigate }) {
   const [deals, setDeals] = useState([]);
   const [dealLoading, setDealLoading] = useState(true);
   const [dealError, setDealError] = useState("");
+  const [selectedRequestId, setSelectedRequestId] = useState("");
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
 
   const fetchPurchaseRequests = async () => {
     try {
@@ -501,28 +509,17 @@ function AdminDashboard({ onNavigate }) {
     }
   };
 
-  const createDeal = async (request) => {
+  const fetchMessageUnreadCount = async () => {
     try {
-      const response = await api.post("/deals", {
-        requestId: request._id,
-        agreedPrice: request.listingId?.price,
-        commissionRate: 2,
-        notes: "Matched by EPR Nexus.",
-      });
-
-      if (response.data.success) {
-        await fetchDeals();
-        await fetchPurchaseRequests();
-        setActive("deals");
-      }
+      const response = await api.get("/requests/messages/unread-count");
+      if (response.data.success) setMessageUnreadCount(Number(response.data.unreadCount || 0));
     } catch (error) {
-      console.error("Create deal failed:", error);
-
-      alert(
-        error.response?.data?.message ||
-          "Failed to create deal.",
-      );
+      console.error("Failed to fetch message unread count:", error);
     }
+  };
+
+  const markMessagesRead = async () => {
+    await fetchMessageUnreadCount();
   };
 
   const updateDealStatus = async (
@@ -661,6 +658,9 @@ function AdminDashboard({ onNavigate }) {
     fetchListings();
     fetchPurchaseRequests();
     fetchDeals();
+    fetchMessageUnreadCount();
+    const interval = window.setInterval(fetchMessageUnreadCount, 10000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const totalCommission = deals.reduce(
@@ -715,11 +715,11 @@ function AdminDashboard({ onNavigate }) {
         <div className="px-4 py-3 border-b border-white/10">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-[#5AC361] text-white flex items-center justify-center font-bold text-sm">
-              {(user?.name || "A").slice(0, 1).toUpperCase()}
+              A
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-white truncate">{user?.name || "Admin"}</p>
-              <p className="text-[10px] text-white/40 truncate">{user?.email || "Administrator"}</p>
+            <div>
+              <p className="text-xs font-semibold text-white">Super Admin</p>
+              <p className="text-[10px] text-white/40">admin@eprnexus.in</p>
             </div>
           </div>
         </div>
@@ -742,10 +742,12 @@ function AdminDashboard({ onNavigate }) {
                 : n.id === "listings"
                   ? listings.length
                   : n.id === "requests"
-                    ? purchaseRequests.filter(
-                        (request) => request.status === "pending",
-                      ).length
-                    : n.badge) > 0 && (
+                    ? purchaseRequests.filter((request) => request.status === "pending").length
+                    : n.id === "quotations"
+                      ? purchaseRequests.filter((request) => request.offer?.finalAmount != null && !request.offer?.acceptedAt).length
+                      : n.id === "messages"
+                        ? messageUnreadCount
+                        : n.badge) > 0 && (
                 <span
                   className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                     active === n.id ? "bg-white/20" : "bg-[#EF4444] text-white"
@@ -756,10 +758,12 @@ function AdminDashboard({ onNavigate }) {
                     : n.id === "listings"
                       ? listings.length
                       : n.id === "requests"
-                        ? purchaseRequests.filter(
-                            (request) => request.status === "pending",
-                          ).length
-                        : n.badge}
+                        ? purchaseRequests.filter((request) => request.status === "pending").length
+                        : n.id === "quotations"
+                          ? purchaseRequests.filter((request) => request.offer?.finalAmount != null && !request.offer?.acceptedAt).length
+                          : n.id === "messages"
+                            ? messageUnreadCount
+                            : n.badge}
                 </span>
               )}
             </button>
@@ -767,10 +771,7 @@ function AdminDashboard({ onNavigate }) {
         </nav>
         <div className="px-3 py-3 border-t border-white/10">
           <button
-            onClick={() => {
-              logout();
-              onNavigate("home");
-            }}
+            onClick={() => onNavigate("home")}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-white/50 hover:bg-white/10 hover:text-white w-full transition-colors"
           >
             <svg
@@ -786,7 +787,7 @@ function AdminDashboard({ onNavigate }) {
                 d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
               />
             </svg>
-            Logout
+            Home
           </button>
         </div>
       </aside>
@@ -824,8 +825,9 @@ function AdminDashboard({ onNavigate }) {
           >
             {NAV.find((n) => n.id === active)?.label ?? "Admin Dashboard"}
           </h1>
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            <NotificationBell compact />
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => onNavigate("home")}>Home</Button>
+            <NotificationBell compact onNavigate={onNavigate} />
             <AdminProfileMenu onNavigate={onNavigate} compact />
           </div>
         </div>
@@ -1032,20 +1034,17 @@ function AdminDashboard({ onNavigate }) {
                         </Td>
 
                         <Td>
-                          {request.status === "pending" && (
-                            <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                            {!["approved", "completed", "cancelled", "rejected"].includes(request.status) && (
                               <Button
                                 size="sm"
-                                onClick={() =>
-                                  reviewPurchaseRequest(
-                                    request._id,
-                                    "reviewing",
-                                  )
-                                }
+                                onClick={() => { setSelectedRequestId(request._id); setActive("quotations"); }}
                               >
-                                Review
+                                Manage Request
                               </Button>
+                            )}
 
+                            {request.status === "pending" && (
                               <Button
                                 size="sm"
                                 variant="danger"
@@ -1065,33 +1064,8 @@ function AdminDashboard({ onNavigate }) {
                               >
                                 Reject
                               </Button>
-                            </div>
-                          )}
-
-                          {request.status === "reviewing" && (
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                reviewPurchaseRequest(request._id, "matched")
-                              }
-                            >
-                              Mark Matched
-                            </Button>
-                          )}
-
-                          {request.status === "matched" && (
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                reviewPurchaseRequest(
-                                  request._id,
-                                  "negotiating",
-                                )
-                              }
-                            >
-                              Start Negotiation
-                            </Button>
-                          )}
+                            )}
+                          </div>
                         </Td>
                       </Tr>
                     ))
@@ -1498,94 +1472,32 @@ function AdminDashboard({ onNavigate }) {
 
                           {/* Actions */}
                           <div className="flex flex-col gap-2 xl:w-48">
-                            {request.status === "pending" && (
-                              <>
-                                <Button
-                                  onClick={() =>
-                                    reviewPurchaseRequest(
-                                      request._id,
-                                      "reviewing",
-                                    )
-                                  }
-                                >
-                                  Start Review
-                                </Button>
-
-                                <Button
-                                  variant="danger"
-                                  onClick={() => {
-                                    const reason = window.prompt(
-                                      "Enter rejection reason:",
-                                    );
-
-                                    if (reason?.trim()) {
-                                      reviewPurchaseRequest(
-                                        request._id,
-                                        "rejected",
-                                        reason.trim(),
-                                      );
-                                    }
-                                  }}
-                                >
-                                  Reject Request
-                                </Button>
-                              </>
-                            )}
-
-                            {request.status === "reviewing" && (
-                              <>
-                                <Button
-                                  onClick={() =>
-                                    reviewPurchaseRequest(
-                                      request._id,
-                                      "matched",
-                                    )
-                                  }
-                                >
-                                  Mark Matched
-                                </Button>
-
-                                <Button
-                                  variant="danger"
-                                  onClick={() => {
-                                    const reason = window.prompt(
-                                      "Enter rejection reason:",
-                                    );
-
-                                    if (reason?.trim()) {
-                                      reviewPurchaseRequest(
-                                        request._id,
-                                        "rejected",
-                                        reason.trim(),
-                                      );
-                                    }
-                                  }}
-                                >
-                                  Reject Request
-                                </Button>
-                              </>
-                            )}
-
-                            {request.status === "matched" && (
+                            {!["approved", "completed", "cancelled", "rejected"].includes(request.status) && (
                               <Button
-                                onClick={() =>
-                                  reviewPurchaseRequest(
-                                    request._id,
-                                    "negotiating",
-                                  )
-                                }
+                                onClick={() => { setSelectedRequestId(request._id); setActive("quotations"); }}
                               >
-                                Start Negotiation
+                                Manage Request
                               </Button>
                             )}
 
-                            {request.status === "negotiating" && (
+                            {request.status === "pending" && (
                               <Button
-                                onClick={() =>
-                                  reviewPurchaseRequest(request._id, "approved")
-                                }
+                                variant="danger"
+                                onClick={() => {
+                                  const reason = window.prompt(
+                                    "Enter rejection reason:",
+                                  );
+
+                                  if (reason?.trim()) {
+                                    reviewPurchaseRequest(
+                                      request._id,
+                                      "rejected",
+                                      reason.trim(),
+                                    );
+                                  }
+                                }}
                               >
-                                Approve Deal
+                                Reject Request
                               </Button>
                             )}
                           </div>
@@ -1596,6 +1508,18 @@ function AdminDashboard({ onNavigate }) {
                 </div>
               )}
             </Card>
+          )}
+
+          {active === "quotations" && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-[#0F1923]" style={{ fontFamily: "Outfit, sans-serif" }}>Quotations</h2>
+                  <p className="text-xs text-[#9CA3AF] mt-1">Create and revise buyer quotations. Messages are handled separately.</p>
+                </div>
+              </div>
+              <QuotationCenter initialRequestId={selectedRequestId} />
+            </div>
           )}
 
           {active === "deals" && (
@@ -1647,8 +1571,7 @@ function AdminDashboard({ onNavigate }) {
 
                     const stages = [
                       { key: "matched", label: "Matched" },
-                      { key: "negotiating", label: "Negotiating" },
-                      { key: "terms_agreed", label: "Terms Agreed" },
+                      { key: "terms_agreed", label: "Quotation Accepted" },
                       { key: "payment_coordination", label: "Payment Coordination" },
                       { key: "completed", label: "Deal Completed" },
                     ];
@@ -1657,7 +1580,7 @@ function AdminDashboard({ onNavigate }) {
                       (stage) => stage.key === deal.status,
                     );
                     const normalizedIndex =
-                      currentIndex === -1 ? 0 : currentIndex;
+                      deal.status === "cancelled" ? -1 : currentIndex === -1 ? 0 : currentIndex;
 
                     return (
                       <Card key={deal._id} className="p-5">
@@ -1775,30 +1698,8 @@ function AdminDashboard({ onNavigate }) {
 
                           <div className="flex flex-wrap gap-2">
                             {deal.status === "matched" && (
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  updateDealStatus(
-                                    deal._id,
-                                    "negotiating",
-                                  )
-                                }
-                              >
-                                Start Negotiation
-                              </Button>
-                            )}
-
-                            {deal.status === "negotiating" && (
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  updateDealStatus(
-                                    deal._id,
-                                    "terms_agreed",
-                                  )
-                                }
-                              >
-                                Terms Agreed
+                              <Button size="sm" onClick={() => updateDealStatus(deal._id, "terms_agreed")}>
+                                Confirm Terms
                               </Button>
                             )}
 
@@ -1817,17 +1718,14 @@ function AdminDashboard({ onNavigate }) {
                               </Button>
                             )}
 
-                            {deal.status === "payment_coordination" && (
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  updateDealStatus(
-                                    deal._id,
-                                    "completed",
-                                    "received",
-                                  )
-                                }
-                              >
+                            {deal.status === "payment_coordination" && deal.paymentStatus !== "received" && (
+                              <Button size="sm" onClick={() => updateDealStatus(deal._id, "payment_coordination", "received")}>
+                                Mark Payment Received
+                              </Button>
+                            )}
+
+                            {deal.status === "payment_coordination" && deal.paymentStatus === "received" && (
+                              <Button size="sm" onClick={() => updateDealStatus(deal._id, "completed", "received")}>
                                 Mark Completed
                               </Button>
                             )}
@@ -1844,7 +1742,7 @@ function AdminDashboard({ onNavigate }) {
                                     )
                                   }
                                 >
-                                  Cancel
+                                  Cancel Deal
                                 </Button>
                               )}
                           </div>
@@ -1962,21 +1860,21 @@ function AdminDashboard({ onNavigate }) {
             </Card>
           )}
 
-          {(active === "messages" ||
-            active === "settings") && (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="w-14 h-14 rounded-full bg-[#F0F4F8] flex items-center justify-center text-[#9CA3AF] mb-3">
-                <NavIcon id={active} />
+          {active === "messages" && (
+            <div>
+              <div className="mb-4">
+                <h2 className="text-base font-semibold text-[#0F1923]" style={{ fontFamily: "Outfit, sans-serif" }}>Messages</h2>
+                <p className="text-xs text-[#9CA3AF] mt-1">Open any request to read the controlled conversation and message either the buyer or seller separately.</p>
               </div>
-              <p
-                className="font-semibold text-[#374151]"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {NAV.find((n) => n.id === active)?.label}
-              </p>
-              <p className="text-sm text-[#9CA3AF] mt-1">
-                Full feature available in the complete build.
-              </p>
+              <ManagedMessagesPage initialRequestId={selectedRequestId} onRead={markMessagesRead} />
+            </div>
+          )}
+
+          {active === "settings" && (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <div className="w-14 h-14 rounded-full bg-[#F0F4F8] flex items-center justify-center text-[#9CA3AF] mb-3"><NavIcon id="settings" /></div>
+              <p className="font-semibold text-[#374151]">Settings</p>
+              <p className="text-sm text-[#9CA3AF] mt-1">Platform settings will be added here.</p>
             </div>
           )}
         </div>

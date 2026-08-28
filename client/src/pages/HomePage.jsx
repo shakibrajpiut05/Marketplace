@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext.jsx";
-import { credits, CREDIT_TYPES } from "../data/mock";
-import { Badge, Button, CreditTypeIcon } from "../components/ui";
+import { useState } from 'react'
+import { useAuth } from '../context/AuthContext.jsx'
+import { credits, CREDIT_TYPES } from '../data/mock'
+import { Badge, Button, CreditTypeIcon } from '../components/ui'
 function CreditCard({ credit, onNavigate }) {
-  const [saved, setSaved] = useState(false);
+  const { user } = useAuth()
+  const [saved, setSaved] = useState(false)
   return (
     <div className="bg-white border border-[#E5EAF0] rounded-xl p-5 hover:shadow-md hover:border-[#CBD5E1] transition-all duration-200 flex flex-col gap-3">
       <div className="flex items-start justify-between">
@@ -17,11 +18,11 @@ function CreditCard({ credit, onNavigate }) {
         </div>
         <button
           onClick={() => setSaved((s) => !s)}
-          className={`p-1.5 rounded-lg transition-colors ${saved ? "text-[#5AC361]" : "text-[#CBD5E1] hover:text-[#9CA3AF]"}`}
+          className={`p-1.5 rounded-lg transition-colors ${saved ? 'text-[#5AC361]' : 'text-[#CBD5E1] hover:text-[#9CA3AF]'}`}
         >
           <svg
             className="w-4 h-4"
-            fill={saved ? "currentColor" : "none"}
+            fill={saved ? 'currentColor' : 'none'}
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
@@ -38,14 +39,14 @@ function CreditCard({ credit, onNavigate }) {
       <div>
         <h3
           className="font-semibold text-[#0F1923] text-base"
-          style={{ fontFamily: "Outfit, sans-serif" }}
+          style={{ fontFamily: 'Outfit, sans-serif' }}
         >
           {credit.type} EPR Credits
         </h3>
         <div className="flex items-baseline gap-2 mt-1">
           <span
             className="text-xl font-bold text-[#5AC361]"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+            style={{ fontFamily: 'Outfit, sans-serif' }}
           >
             ₹{credit.price}
           </span>
@@ -68,9 +69,7 @@ function CreditCard({ credit, onNavigate }) {
               d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
             />
           </svg>
-          <span className="font-medium text-[#374151]">
-            {credit.quantity} MT
-          </span>
+          <span className="font-medium text-[#374151]">{credit.quantity} MT</span>
         </div>
         <div className="flex items-center gap-1.5 text-[#6B7280]">
           <svg
@@ -127,169 +126,62 @@ function CreditCard({ credit, onNavigate }) {
         </div>
       </div>
 
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full mt-1 border-[#5AC361] text-[#5AC361] hover:bg-[#EBF8EC] hover:border-[#5AC361]"
-        onClick={() => onNavigate("credit-detail", credit.id)}
-      >
-        Request This Credit
-      </Button>
+      {user?.role === 'seller' ? (
+        <button
+          type="button"
+          disabled
+          className="w-full mt-1 py-2 rounded-lg text-sm font-medium border border-[#E5EAF0] bg-[#F8FAFC] text-[#9CA3AF] cursor-not-allowed"
+          title="Sellers are not authorized to request credits."
+        >
+          Seller accounts cannot request credits
+        </button>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-1 border-[#5AC361] text-[#5AC361] hover:bg-[#EBF8EC] hover:border-[#5AC361]"
+          onClick={() => onNavigate('credit-detail', credit.id)}
+        >
+          Request This Credit
+        </Button>
+      )}
     </div>
-  );
+  )
 }
 function HomePage({ onNavigate }) {
-  const { user, isAuthenticated, resendVerification } = useAuth();
-  const [notice, setNotice] = useState("");
-  const [noticeLink, setNoticeLink] = useState("");
-  const [resending, setResending] = useState(false);
-
-  useEffect(() => {
-    const savedNotice = sessionStorage.getItem("authNotice");
-    if (savedNotice) {
-      try {
-        const parsed = JSON.parse(savedNotice);
-        setNotice(parsed.message || savedNotice);
-        setNoticeLink(parsed.link || "");
-      } catch {
-        setNotice(savedNotice);
-      }
-      sessionStorage.removeItem("authNotice");
-    }
-  }, []);
-
-  const emailPending =
-    isAuthenticated && user?.role !== "admin" && !user?.emailVerified;
-  const verificationPending =
-    isAuthenticated &&
-    user?.role !== "admin" &&
-    user?.emailVerified &&
-    user?.kycStatus !== "approved";
-  const fullyVerified =
-    isAuthenticated &&
-    (user?.role === "admin" ||
-      (user?.emailVerified && user?.kycStatus === "approved"));
+  const { user } = useAuth()
   const [filters, setFilters] = useState({
-    type: "",
-    minQty: "",
-    maxQty: "",
-    minPrice: "",
-    maxPrice: "",
-    location: "",
-  });
+    type: '',
+    minQty: '',
+    maxQty: '',
+    minPrice: '',
+    maxPrice: '',
+    location: '',
+  })
   const filtered = credits.filter((c) => {
-    if (filters.type && c.type !== filters.type) return false;
-    if (filters.minQty && c.quantity < Number(filters.minQty)) return false;
-    if (filters.maxQty && c.quantity > Number(filters.maxQty)) return false;
-    if (filters.minPrice && c.price < Number(filters.minPrice)) return false;
-    if (filters.maxPrice && c.price > Number(filters.maxPrice)) return false;
-    if (
-      filters.location &&
-      !c.location.toLowerCase().includes(filters.location.toLowerCase())
-    )
-      return false;
-    return true;
-  });
-  const typeOptions = CREDIT_TYPES.map((t) => ({ label: t, value: t }));
+    if (filters.type && c.type !== filters.type) return false
+    if (filters.minQty && c.quantity < Number(filters.minQty)) return false
+    if (filters.maxQty && c.quantity > Number(filters.maxQty)) return false
+    if (filters.minPrice && c.price < Number(filters.minPrice)) return false
+    if (filters.maxPrice && c.price > Number(filters.maxPrice)) return false
+    if (filters.location && !c.location.toLowerCase().includes(filters.location.toLowerCase()))
+      return false
+    return true
+  })
+  const typeOptions = CREDIT_TYPES.map((t) => ({ label: t, value: t }))
   const states = [
-    "Delhi",
-    "Gujarat",
-    "Maharashtra",
-    "Tamil Nadu",
-    "Rajasthan",
-    "Karnataka",
-    "Haryana",
-    "Uttar Pradesh",
-    "Punjab",
-  ];
+    'Delhi',
+    'Gujarat',
+    'Maharashtra',
+    'Tamil Nadu',
+    'Rajasthan',
+    'Karnataka',
+    'Haryana',
+    'Uttar Pradesh',
+    'Punjab',
+  ]
   return (
     <div className="min-h-screen bg-[#F7F9FB]">
-      {isAuthenticated && user?.role !== "admin" && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-5">
-          <div
-            className={`rounded-xl border px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-              fullyVerified
-                ? "bg-[#EBF8EC] border-[#A5D6A7]"
-                : emailPending
-                  ? "bg-[#FFFBEB] border-[#FCD34D]"
-                  : user?.kycStatus === "rejected"
-                    ? "bg-[#FEF2F2] border-[#FECACA]"
-                    : "bg-[#FFFBEB] border-[#FCD34D]"
-            }`}
-          >
-            <div>
-              <p
-                className={`text-sm font-semibold ${fullyVerified ? "text-[#2E7D32]" : emailPending || verificationPending ? "text-[#92400E]" : "text-[#991B1B]"}`}
-              >
-                {fullyVerified
-                  ? "Your account is fully verified."
-                  : emailPending
-                    ? "Email verification pending."
-                    : user?.kycStatus === "rejected"
-                      ? "Your business verification was rejected."
-                      : "Your business verification is under review."}
-              </p>
-              <p className="text-xs text-[#6B7280] mt-1">
-                {fullyVerified
-                  ? "You can use EPR Nexus marketplace services."
-                  : emailPending
-                    ? "You can explore EPR Nexus, but trading services stay locked until your email is verified."
-                    : user?.kycStatus === "rejected"
-                      ? "Review the admin reason and re-upload your documents without creating a new account."
-                      : "Your documents are with the admin team. You can explore the marketplace while you wait."}
-              </p>
-              {notice && (
-                <p className="text-xs text-[#2E7D32] mt-2">{notice}</p>
-              )}
-              {noticeLink && (
-                <a
-                  href={noticeLink}
-                  className="text-xs text-[#2E7D32] font-semibold underline mt-1 inline-block break-all"
-                >
-                  Open development verification link
-                </a>
-              )}
-            </div>
-            {!fullyVerified && (
-              <div className="flex flex-wrap gap-2">
-                {emailPending && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={resending}
-                    onClick={async () => {
-                      try {
-                        setResending(true);
-                        const response = await resendVerification();
-                        setNotice(
-                          response.message || "Verification email sent.",
-                        );
-                      } catch (error) {
-                        setNotice(
-                          error.response?.data?.message ||
-                            "Could not resend verification email.",
-                        );
-                      } finally {
-                        setResending(false);
-                      }
-                    }}
-                  >
-                    {resending ? "Sending..." : "Resend Email"}
-                  </Button>
-                )}
-                {user?.emailVerified && (
-                  <Button size="sm" onClick={() => onNavigate("verification")}>
-                    {user?.kycStatus === "rejected"
-                      ? "Re-submit Verification"
-                      : "Complete Verification"}
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
       {/* ─── Hero ─────────────────────────────────────────────────────── */}
       <section className="bg-white border-b border-[#E5EAF0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16 md:py-20">
@@ -301,19 +193,18 @@ function HomePage({ onNavigate }) {
               </div>
               <h1
                 className="text-4xl md:text-5xl font-bold text-[#0F1923] leading-tight mb-4"
-                style={{ fontFamily: "Outfit, sans-serif" }}
+                style={{ fontFamily: 'Outfit, sans-serif' }}
               >
                 Buy &amp; Sell EPR Credits
                 <br />
                 <span className="text-[#5AC361]">Through Verified Deals</span>
               </h1>
               <p className="text-[#6B7280] text-lg leading-relaxed mb-8">
-                EPR Nexus acts as your trusted mediator to ensure safe,
-                verified, and compliant transactions. Seller contact details are
-                never shared directly.
+                EPR Nexus acts as your trusted mediator to ensure safe, verified, and compliant
+                transactions. Seller contact details are never shared directly.
               </p>
               <div className="flex flex-wrap gap-3">
-                <Button size="lg" onClick={() => onNavigate("marketplace")}>
+                <Button size="lg" onClick={() => onNavigate('marketplace')}>
                   <svg
                     className="w-4 h-4"
                     fill="none"
@@ -329,33 +220,9 @@ function HomePage({ onNavigate }) {
                   </svg>
                   Browse Credits
                 </Button>
-                {isAuthenticated && user?.role === "buyer" && fullyVerified && (
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => onNavigate("buyer-dashboard")}
-                  >
+                {(user?.role === 'buyer' || !user) && (
+                  <Button variant="outline" size="lg" onClick={() => onNavigate('buyer-dashboard')}>
                     Post Requirement
-                  </Button>
-                )}
-                {isAuthenticated &&
-                  user?.role === "buyer" &&
-                  !fullyVerified && (
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={() => onNavigate("verification")}
-                    >
-                      Complete Verification
-                    </Button>
-                  )}
-                {!isAuthenticated && (
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => onNavigate("auth")}
-                  >
-                    Get Started
                   </Button>
                 )}
               </div>
@@ -384,9 +251,7 @@ function HomePage({ onNavigate }) {
                   <p className="text-xs font-semibold text-[#374151] text-center">
                     Seller
                     <br />
-                    <span className="text-[#9CA3AF] font-normal">
-                      Lists Credits
-                    </span>
+                    <span className="text-[#9CA3AF] font-normal">Lists Credits</span>
                   </p>
                 </div>
 
@@ -470,9 +335,7 @@ function HomePage({ onNavigate }) {
                   <p className="text-xs font-semibold text-[#374151] text-center">
                     Buyer
                     <br />
-                    <span className="text-[#9CA3AF] font-normal">
-                      Posts Requirement
-                    </span>
+                    <span className="text-[#9CA3AF] font-normal">Posts Requirement</span>
                   </p>
                 </div>
               </div>
@@ -480,12 +343,7 @@ function HomePage({ onNavigate }) {
               {/* Deal Closed */}
               <div className="flex flex-col items-center gap-2 mt-2">
                 <div className="w-6 h-6 text-[#9CA3AF]">
-                  <svg
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -514,9 +372,9 @@ function HomePage({ onNavigate }) {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3 w-full mt-4">
                 {[
-                  { v: "500+", l: "Credits Listed" },
-                  { v: "\u20B95Cr+", l: "Deals Closed" },
-                  { v: "200+", l: "Verified Sellers" },
+                  { v: '500+', l: 'Credits Listed' },
+                  { v: '\u20B95Cr+', l: 'Deals Closed' },
+                  { v: '200+', l: 'Verified Sellers' },
                 ].map((s) => (
                   <div
                     key={s.l}
@@ -524,7 +382,7 @@ function HomePage({ onNavigate }) {
                   >
                     <p
                       className="text-xl font-bold text-[#5AC361]"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
                     >
                       {s.v}
                     </p>
@@ -542,15 +400,11 @@ function HomePage({ onNavigate }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex flex-wrap gap-2 items-end">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[#6B7280]">
-                Credit Type
-              </label>
+              <label className="text-xs font-medium text-[#6B7280]">Credit Type</label>
               <select
                 className="px-3 py-2 border border-[#E5EAF0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5AC361] min-w-[140px]"
                 value={filters.type}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, type: e.target.value }))
-                }
+                onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
               >
                 <option value="">All Types</option>
                 {typeOptions.map((o) => (
@@ -561,63 +415,47 @@ function HomePage({ onNavigate }) {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[#6B7280]">
-                Quantity (MT)
-              </label>
+              <label className="text-xs font-medium text-[#6B7280]">Quantity (MT)</label>
               <div className="flex items-center gap-1">
                 <input
                   className="px-2 py-2 border border-[#E5EAF0] rounded-lg text-sm w-20 focus:outline-none focus:ring-2 focus:ring-[#5AC361]"
                   placeholder="Min"
                   value={filters.minQty}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, minQty: e.target.value }))
-                  }
+                  onChange={(e) => setFilters((f) => ({ ...f, minQty: e.target.value }))}
                 />
                 <span className="text-[#CBD5E1]">—</span>
                 <input
                   className="px-2 py-2 border border-[#E5EAF0] rounded-lg text-sm w-20 focus:outline-none focus:ring-2 focus:ring-[#5AC361]"
                   placeholder="Max"
                   value={filters.maxQty}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, maxQty: e.target.value }))
-                  }
+                  onChange={(e) => setFilters((f) => ({ ...f, maxQty: e.target.value }))}
                 />
               </div>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[#6B7280]">
-                Price (₹/MT)
-              </label>
+              <label className="text-xs font-medium text-[#6B7280]">Price (₹/MT)</label>
               <div className="flex items-center gap-1">
                 <input
                   className="px-2 py-2 border border-[#E5EAF0] rounded-lg text-sm w-20 focus:outline-none focus:ring-2 focus:ring-[#5AC361]"
                   placeholder="Min"
                   value={filters.minPrice}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, minPrice: e.target.value }))
-                  }
+                  onChange={(e) => setFilters((f) => ({ ...f, minPrice: e.target.value }))}
                 />
                 <span className="text-[#CBD5E1]">—</span>
                 <input
                   className="px-2 py-2 border border-[#E5EAF0] rounded-lg text-sm w-20 focus:outline-none focus:ring-2 focus:ring-[#5AC361]"
                   placeholder="Max"
                   value={filters.maxPrice}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, maxPrice: e.target.value }))
-                  }
+                  onChange={(e) => setFilters((f) => ({ ...f, maxPrice: e.target.value }))}
                 />
               </div>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[#6B7280]">
-                Location
-              </label>
+              <label className="text-xs font-medium text-[#6B7280]">Location</label>
               <select
                 className="px-3 py-2 border border-[#E5EAF0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5AC361] min-w-[140px]"
                 value={filters.location}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, location: e.target.value }))
-                }
+                onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
               >
                 <option value="">All States</option>
                 {states.map((s) => (
@@ -637,12 +475,12 @@ function HomePage({ onNavigate }) {
               className="px-4 py-2 border border-[#E5EAF0] hover:bg-[#F0F4F8] text-[#6B7280] rounded-lg text-sm font-medium transition-colors"
               onClick={() =>
                 setFilters({
-                  type: "",
-                  minQty: "",
-                  maxQty: "",
-                  minPrice: "",
-                  maxPrice: "",
-                  location: "",
+                  type: '',
+                  minQty: '',
+                  maxQty: '',
+                  minPrice: '',
+                  maxPrice: '',
+                  location: '',
                 })
               }
             >
@@ -658,7 +496,7 @@ function HomePage({ onNavigate }) {
           <div>
             <h2
               className="text-2xl font-bold text-[#0F1923]"
-              style={{ fontFamily: "Outfit, sans-serif" }}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
             >
               Available EPR Credits
             </h2>
@@ -668,7 +506,7 @@ function HomePage({ onNavigate }) {
           </div>
           <button
             className="text-sm text-[#5AC361] font-medium hover:underline"
-            onClick={() => onNavigate("marketplace")}
+            onClick={() => onNavigate('marketplace')}
           >
             View All →
           </button>
@@ -680,9 +518,7 @@ function HomePage({ onNavigate }) {
         </div>
         {filtered.length === 0 && (
           <div className="text-center py-16 text-[#9CA3AF]">
-            <p className="text-lg font-semibold text-[#374151]">
-              No credits match your filters
-            </p>
+            <p className="text-lg font-semibold text-[#374151]">No credits match your filters</p>
             <p className="text-sm mt-1">Try adjusting your search criteria</p>
           </div>
         )}
@@ -693,7 +529,7 @@ function HomePage({ onNavigate }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
           <h2
             className="text-2xl font-bold text-[#0F1923] text-center mb-2"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+            style={{ fontFamily: 'Outfit, sans-serif' }}
           >
             How It Works
           </h2>
@@ -703,9 +539,9 @@ function HomePage({ onNavigate }) {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
               {
-                n: "1",
-                title: "Seller Lists Credits",
-                desc: "Seller uploads credit details + portal screenshot as proof",
+                n: '1',
+                title: 'Seller Lists Credits',
+                desc: 'Seller uploads credit details + portal screenshot as proof',
                 icon: (
                   <svg
                     className="w-5 h-5"
@@ -723,9 +559,9 @@ function HomePage({ onNavigate }) {
                 ),
               },
               {
-                n: "2",
-                title: "Buyer Requests",
-                desc: "Buyer shows interest in required credits with quantity & budget",
+                n: '2',
+                title: 'Buyer Requests',
+                desc: 'Buyer shows interest in required credits with quantity & budget',
                 icon: (
                   <svg
                     className="w-5 h-5"
@@ -743,9 +579,9 @@ function HomePage({ onNavigate }) {
                 ),
               },
               {
-                n: "3",
-                title: "We Receive & Verify",
-                desc: "EPR Nexus verifies both parties and credit authenticity",
+                n: '3',
+                title: 'We Receive & Verify',
+                desc: 'EPR Nexus verifies both parties and credit authenticity',
                 icon: (
                   <svg
                     className="w-5 h-5"
@@ -763,9 +599,9 @@ function HomePage({ onNavigate }) {
                 ),
               },
               {
-                n: "4",
-                title: "We Facilitate Deal",
-                desc: "EPR Nexus negotiates & locks deal terms on behalf of both",
+                n: '4',
+                title: 'We Facilitate Deal',
+                desc: 'EPR Nexus negotiates & locks deal terms on behalf of both',
                 icon: (
                   <svg
                     className="w-5 h-5"
@@ -783,9 +619,9 @@ function HomePage({ onNavigate }) {
                 ),
               },
               {
-                n: "5",
-                title: "Deal Completed",
-                desc: "Deal completed & commission recorded. Credits transferred.",
+                n: '5',
+                title: 'Deal Completed',
+                desc: 'Deal completed & commission recorded. Credits transferred.',
                 icon: (
                   <svg
                     className="w-5 h-5"
@@ -803,10 +639,7 @@ function HomePage({ onNavigate }) {
                 ),
               },
             ].map((step, i) => (
-              <div
-                key={step.n}
-                className="flex flex-col items-center text-center gap-3"
-              >
+              <div key={step.n} className="flex flex-col items-center text-center gap-3">
                 <div className="relative">
                   <div className="w-12 h-12 rounded-2xl bg-[#EBF8EC] border-2 border-[#5AC361] text-[#5AC361] flex items-center justify-center">
                     {step.icon}
@@ -835,13 +668,11 @@ function HomePage({ onNavigate }) {
                 <div>
                   <p
                     className="text-sm font-semibold text-[#0F1923]"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
                   >
                     {step.title}
                   </p>
-                  <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
-                    {step.desc}
-                  </p>
+                  <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">{step.desc}</p>
                 </div>
               </div>
             ))}
@@ -853,15 +684,15 @@ function HomePage({ onNavigate }) {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
         <h2
           className="text-2xl font-bold text-[#0F1923] mb-8"
-          style={{ fontFamily: "Outfit, sans-serif" }}
+          style={{ fontFamily: 'Outfit, sans-serif' }}
         >
           Why Choose EPR Nexus
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {[
             {
-              title: "Verified Sellers",
-              desc: "Only verified & documented sellers",
+              title: 'Verified Sellers',
+              desc: 'Only verified & documented sellers',
               icon: (
                 <svg
                   className="w-5 h-5"
@@ -879,8 +710,8 @@ function HomePage({ onNavigate }) {
               ),
             },
             {
-              title: "Secure Transactions",
-              desc: "All deals are mediated by EPR Nexus",
+              title: 'Secure Transactions',
+              desc: 'All deals are mediated by EPR Nexus',
               icon: (
                 <svg
                   className="w-5 h-5"
@@ -898,8 +729,8 @@ function HomePage({ onNavigate }) {
               ),
             },
             {
-              title: "Best Market Prices",
-              desc: "Transparent pricing & market insights",
+              title: 'Best Market Prices',
+              desc: 'Transparent pricing & market insights',
               icon: (
                 <svg
                   className="w-5 h-5"
@@ -917,8 +748,8 @@ function HomePage({ onNavigate }) {
               ),
             },
             {
-              title: "Wide Credit Coverage",
-              desc: "All major EPR credit categories",
+              title: 'Wide Credit Coverage',
+              desc: 'All major EPR credit categories',
               icon: (
                 <svg
                   className="w-5 h-5"
@@ -936,8 +767,8 @@ function HomePage({ onNavigate }) {
               ),
             },
             {
-              title: "Expert Support",
-              desc: "Our team supports you every step",
+              title: 'Expert Support',
+              desc: 'Our team supports you every step',
               icon: (
                 <svg
                   className="w-5 h-5"
@@ -965,7 +796,7 @@ function HomePage({ onNavigate }) {
               <div>
                 <p
                   className="font-semibold text-sm text-[#0F1923]"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
                 >
                   {f.title}
                 </p>
@@ -982,20 +813,20 @@ function HomePage({ onNavigate }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
               {
-                t: "CPCB Registered Partners",
-                d: "All sellers are CPCB or state PCB registered entities",
+                t: 'CPCB Registered Partners',
+                d: 'All sellers are CPCB or state PCB registered entities',
               },
               {
-                t: "100% Document Verification",
-                d: "Every listing verified against portal screenshots",
+                t: '100% Document Verification',
+                d: 'Every listing verified against portal screenshots',
               },
               {
-                t: "Secure & Reliable Process",
-                d: "End-to-end mediation \u2014 no direct contact ever",
+                t: 'Secure & Reliable Process',
+                d: 'End-to-end mediation \u2014 no direct contact ever',
               },
               {
-                t: "Confidential & Transparent",
-                d: "Anonymized IDs, transparent commission structure",
+                t: 'Confidential & Transparent',
+                d: 'Anonymized IDs, transparent commission structure',
               },
             ].map((t) => (
               <div key={t.t} className="flex flex-col gap-2">
@@ -1007,17 +838,10 @@ function HomePage({ onNavigate }) {
                     stroke="currentColor"
                     strokeWidth={2}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5 13l4 4L19 7"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <p
-                  className="font-semibold text-sm"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
+                <p className="font-semibold text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>
                   {t.t}
                 </p>
                 <p className="text-xs text-[#9CA3AF] leading-relaxed">{t.d}</p>
@@ -1027,35 +851,29 @@ function HomePage({ onNavigate }) {
         </div>
       </section>
 
-      {!isAuthenticated && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
-          <div className="bg-gradient-to-br from-[#EBF8EC] to-[#F0F4F8] border border-[#A5D6A7] rounded-2xl p-10 text-center">
-            <h2
-              className="text-3xl font-bold text-[#0F1923] mb-3"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Ready to trade EPR Credits?
-            </h2>
-            <p className="text-[#6B7280] mb-8 max-w-md mx-auto">
-              Join EPR Nexus and be a part of India's most trusted EPR Credit
-              Marketplace.
-            </p>
-            <div className="flex flex-wrap gap-4 justify-center">
-              <Button size="lg" onClick={() => onNavigate("auth", void 0)}>
-                Sign Up as Seller
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => onNavigate("auth", void 0)}
-              >
-                Sign Up as Buyer
-              </Button>
-            </div>
+      {/* ─── Sign Up CTA ──────────────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
+        <div className="bg-gradient-to-br from-[#EBF8EC] to-[#F0F4F8] border border-[#A5D6A7] rounded-2xl p-10 text-center">
+          <h2
+            className="text-3xl font-bold text-[#0F1923] mb-3"
+            style={{ fontFamily: 'Outfit, sans-serif' }}
+          >
+            Ready to trade EPR Credits?
+          </h2>
+          <p className="text-[#6B7280] mb-8 max-w-md mx-auto">
+            Join EPR Nexus and be a part of India's most trusted EPR Credit Marketplace.
+          </p>
+          <div className="flex flex-wrap gap-4 justify-center">
+            <Button size="lg" onClick={() => onNavigate('auth', void 0)}>
+              Sign Up as Seller
+            </Button>
+            <Button variant="outline" size="lg" onClick={() => onNavigate('auth', void 0)}>
+              Sign Up as Buyer
+            </Button>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
     </div>
-  );
+  )
 }
-export { HomePage as default };
+export { HomePage as default }
