@@ -1,5 +1,58 @@
 import mongoose from "mongoose";
 
+const commercialTermsSchema = new mongoose.Schema(
+  {
+    quantity: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    agreedPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    creditSubtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    commissionAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    finalAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    currency: {
+      type: String,
+      default: "INR",
+      trim: true,
+      uppercase: true,
+    },
+
+    quotationVersion: {
+      type: Number,
+      default: null,
+      min: 1,
+    },
+
+    lockedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
 const dealSchema = new mongoose.Schema(
   {
     requestId: {
@@ -62,6 +115,8 @@ const dealSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // Backward compatibility only. The current business model uses a
+    // manually entered fixed commissionAmount, not a percentage.
     commissionRate: {
       type: Number,
       default: 0,
@@ -74,7 +129,6 @@ const dealSchema = new mongoose.Schema(
       min: 0,
     },
 
-    // EPR Nexus fee is manually determined per transaction.
     serviceFee: {
       type: Number,
       default: 0,
@@ -91,6 +145,32 @@ const dealSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+
+    /*
+     * Snapshot of the exact commercial terms accepted by the buyer.
+     * This is the deal's financial source of truth after acceptance.
+     */
+    commercialTerms: {
+      type: commercialTermsSchema,
+      default: null,
+    },
+
+    commercialTermsLocked: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    commercialTermsLockedAt: {
+      type: Date,
+      default: null,
+    },
+
+    quotationVersion: {
+      type: Number,
+      default: null,
+      min: 1,
     },
 
     status: {
@@ -111,6 +191,7 @@ const dealSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "initiated", "received", "failed"],
       default: "pending",
+      index: true,
     },
 
     notes: {
@@ -123,11 +204,28 @@ const dealSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+
+    cancellationReason: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 2000,
+    },
   },
   {
     timestamps: true,
   },
 );
+
+dealSchema.index({ buyerId: 1, status: 1, createdAt: -1 });
+dealSchema.index({ sellerId: 1, status: 1, createdAt: -1 });
+dealSchema.index({ paymentStatus: 1, status: 1 });
+dealSchema.index({ requestId: 1 }, { unique: true, sparse: true });
 
 const Deal = mongoose.model("Deal", dealSchema);
 

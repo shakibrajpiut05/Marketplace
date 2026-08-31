@@ -21,6 +21,11 @@ import matchingRoutes from "./routes/matching.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import activityLogRoutes from "./routes/activityLog.routes.js";
 import reportRoutes from "./routes/report.routes.js";
+import dealMessageRoutes from "./routes/dealMessage.routes.js";
+import watchlistRoutes from "./routes/watchlist.routes.js";
+import paymentRoutes from "./routes/payment.routes.js";
+import invoiceRoutes from "./routes/invoice.routes.js";
+import disputeRoutes from "./routes/dispute.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,6 +99,11 @@ app.use("/api/matching", matchingRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/activity-logs", activityLogRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/deal-messages", dealMessageRoutes);
+app.use("/api/watchlist", watchlistRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/invoices", invoiceRoutes);
+app.use("/api/disputes", disputeRoutes);
 
 /*
 |--------------------------------------------------------------------------

@@ -74,3 +74,42 @@ export const sendEmailVerification = async ({
     verificationUrl,
   };
 };
+
+export const sendPasswordResetEmail = async ({
+  email,
+  name,
+  token,
+}) => {
+  const resetUrl = `${CLIENT_URL}/?reset-password=${encodeURIComponent(token)}`;
+  const mailer = getTransporter();
+
+  if (!mailer) {
+    console.warn(
+      `[EMAIL] SMTP is not configured. Password reset URL for ${email}: ${resetUrl}`,
+    );
+    return { sent: false, resetUrl };
+  }
+
+  await mailer.sendMail({
+    from: EMAIL_FROM || SMTP_USER,
+    to: email,
+    subject: "Reset your EPR Nexus password",
+    text: `Hi ${name},\n\nWe received a request to reset your EPR Nexus password. Open this link to choose a new password:\n${resetUrl}\n\nThis link expires in 1 hour. If you did not request a password reset, you can ignore this email.`,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0F1923;max-width:600px;margin:0 auto;padding:24px">
+        <h2 style="margin-bottom:8px">Reset your EPR Nexus password</h2>
+        <p>Hi ${name},</p>
+        <p>We received a request to reset your password. Use the button below to choose a new password.</p>
+        <p>
+          <a href="${resetUrl}" style="display:inline-block;background:#5AC361;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600">
+            Reset Password
+          </a>
+        </p>
+        <p style="font-size:13px;color:#6B7280">This reset link expires in 1 hour and can only be used once.</p>
+        <p style="font-size:13px;color:#6B7280">If you did not request this, you can safely ignore this email.</p>
+      </div>
+    `,
+  });
+
+  return { sent: true, resetUrl };
+};

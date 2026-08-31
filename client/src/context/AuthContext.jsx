@@ -141,6 +141,19 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
+  const forgotPassword = async (email) => {
+    const response = await api.post("/auth/forgot-password", { email });
+    return response.data;
+  };
+
+  const resetPassword = async (token, password) => {
+    const response = await api.post("/auth/reset-password", {
+      token,
+      password,
+    });
+    return response.data;
+  };
+
   const resendSignupVerification = async () => {
     const session = signupSession || readSignupSession();
 
@@ -219,6 +232,8 @@ export const AuthProvider = ({ children }) => {
         startSignupSession,
         signupSession,
         resendVerification,
+        forgotPassword,
+        resetPassword,
         resendSignupVerification,
         changeSignupEmail,
         loginFromEmailVerification,

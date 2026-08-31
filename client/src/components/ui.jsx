@@ -1,46 +1,54 @@
+import { useState } from "react";
 const badgeStyles = {
-  verified: 'bg-[#EBF8EC] text-[#2E7D32] border-[#A5D6A7]',
-  active: 'bg-[#EBF8EC] text-[#2E7D32] border-[#A5D6A7]',
-  pending: 'bg-[#FFFBEB] text-[#92400E] border-[#FCD34D]',
-  rejected: 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]',
-  discussion: 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]',
-  open: 'bg-[#F5F3FF] text-[#5B21B6] border-[#DDD6FE]',
-  closed: 'bg-[#F3F4F6] text-[#374151] border-[#D1D5DB]',
-  new: 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]',
-  matched: 'bg-[#F0FDF4] text-[#15803D] border-[#86EFAC]',
-  completed: 'bg-[#F3F4F6] text-[#374151] border-[#D1D5DB]',
-  payment: 'bg-[#FFF7ED] text-[#92400E] border-[#FED7AA]',
-}
+  verified: "bg-[#EBF8EC] text-[#2E7D32] border-[#A5D6A7]",
+  active: "bg-[#EBF8EC] text-[#2E7D32] border-[#A5D6A7]",
+  pending: "bg-[#FFFBEB] text-[#92400E] border-[#FCD34D]",
+  rejected: "bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]",
+  discussion: "bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]",
+  open: "bg-[#F5F3FF] text-[#5B21B6] border-[#DDD6FE]",
+  closed: "bg-[#F3F4F6] text-[#374151] border-[#D1D5DB]",
+  new: "bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]",
+  matched: "bg-[#F0FDF4] text-[#15803D] border-[#86EFAC]",
+  completed: "bg-[#F3F4F6] text-[#374151] border-[#D1D5DB]",
+  payment: "bg-[#FFF7ED] text-[#92400E] border-[#FED7AA]",
+};
+
 const badgeLabels = {
-  Active: 'active',
-  Verified: 'verified',
-  'Pending Verification': 'pending',
-  Pending: 'pending',
-  Rejected: 'rejected',
-  'In Discussion': 'discussion',
-  Open: 'open',
-  Closed: 'closed',
-  New: 'new',
-  'In Review': 'pending',
-  Negotiating: 'discussion',
-  'Terms Agreed': 'matched',
-  Matched: 'matched',
-  Completed: 'completed',
-  'Payment Coordination': 'payment',
-}
+  Active: "active",
+  Verified: "verified",
+  "Pending Verification": "pending",
+  Pending: "pending",
+  Rejected: "rejected",
+  "In Discussion": "discussion",
+  Open: "open",
+  Closed: "closed",
+  New: "new",
+  "In Review": "pending",
+  Negotiating: "discussion",
+  "Terms Agreed": "matched",
+  Matched: "matched",
+  Completed: "completed",
+  "Payment Coordination": "payment",
+};
+
 function Badge({ label, variant }) {
-  const v = variant ?? badgeLabels[label] ?? 'closed'
+  const v = variant ?? badgeLabels[label] ?? "closed";
+
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badgeStyles[v]}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold leading-none ${badgeStyles[v] ?? badgeStyles.closed}`}
     >
-      {(v === 'verified' || v === 'active') && (
-        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+      {(v === "verified" || v === "active") && (
+        <svg
+          className="h-3 w-3"
+          viewBox="0 0 12 12"
+          fill="none"
+          aria-hidden="true"
+        >
           <path
             d="M10 3L5 8.5 2 5.5"
             stroke="currentColor"
             strokeWidth="1.5"
-            fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -48,129 +56,242 @@ function Badge({ label, variant }) {
       )}
       {label}
     </span>
-  )
+  );
 }
+
 const btnBase =
-  'inline-flex items-center justify-center gap-2 font-medium transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361] disabled:opacity-50 disabled:cursor-not-allowed'
+  "inline-flex items-center justify-center gap-2 font-semibold transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 active:translate-y-px";
+
 const btnVariants = {
-  primary: 'bg-[#5AC361] hover:bg-[#3EA646] text-white rounded-lg',
-  secondary: 'bg-[#F0F4F8] hover:bg-[#E2E8F0] text-[#374151] rounded-lg',
+  primary:
+    "rounded-lg bg-[#5AC361] text-white shadow-sm hover:bg-[#3EA646] hover:shadow-md",
+  secondary: "rounded-lg bg-[#F0F4F8] text-[#344054] hover:bg-[#E6EBF1]",
   outline:
-    'border border-[#E5EAF0] hover:border-[#CBD5E1] hover:bg-[#F7F9FB] text-[#374151] rounded-lg bg-white',
-  ghost: 'hover:bg-[#F0F4F8] text-[#374151] rounded-lg',
-  danger: 'bg-[#EF4444] hover:bg-[#DC2626] text-white rounded-lg',
-}
+    "rounded-lg border border-[#DCE3EA] bg-white text-[#344054] shadow-sm hover:border-[#C8D1DB] hover:bg-[#F8FAFC]",
+  ghost: "rounded-lg text-[#475467] hover:bg-[#F0F4F8] hover:text-[#1F2937]",
+  danger:
+    "rounded-lg bg-[#EF4444] text-white shadow-sm hover:bg-[#DC2626] hover:shadow-md",
+};
+
 const btnSizes = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-6 py-2.5 text-base',
-}
-function Button({ variant = 'primary', size = 'md', children, className = '', ...props }) {
+  xs: "px-2.5 py-1.5 text-xs",
+  sm: "px-3 py-1.5 text-sm",
+  md: "px-4 py-2 text-sm",
+  lg: "px-5 py-2.5 text-sm",
+};
+
+function Button({
+  variant = "primary",
+  size = "md",
+  children,
+  className = "",
+  ...props
+}) {
   return (
     <button
-      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${className}`}
+      className={`${btnBase} ${btnVariants[variant] ?? btnVariants.primary} ${btnSizes[size] ?? btnSizes.md} ${className}`}
       {...props}
     >
       {children}
     </button>
-  )
+  );
 }
-function Card({ children, className = '' }) {
+
+function Card({ children, className = "", interactive = false, ...props }) {
   return (
-    <div className={`bg-white border border-[#E5EAF0] rounded-xl shadow-sm ${className}`}>
+    <div
+      className={`rounded-xl border border-[#E5EAF0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.03)] ${
+        interactive
+          ? "transition-all duration-150 hover:-translate-y-px hover:border-[#D5DEE7] hover:shadow-[0_6px_18px_rgba(16,24,40,0.06)]"
+          : ""
+      } ${className}`}
+      {...props}
+    >
       {children}
     </div>
-  )
+  );
 }
-function Input({ label, error, className = '', id, ...props }) {
+
+function PageHeader({ eyebrow, title, description, actions, className = "" }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div
+      className={`mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${className}`}
+    >
+      <div className="min-w-0">
+        {eyebrow && (
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">
+            {eyebrow}
+          </p>
+        )}
+        <h1 className="font-heading text-2xl font-bold tracking-[-0.02em] text-[#101828] sm:text-3xl">
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-[#667085]">
+            {description}
+          </p>
+        )}
+      </div>
+      {actions && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {actions}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionHeader({ title, description, action, className = "" }) {
+  return (
+    <div
+      className={`mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between ${className}`}
+    >
+      <div className="min-w-0">
+        <h2 className="font-heading text-lg font-semibold tracking-[-0.01em] text-[#101828]">
+          {title}
+        </h2>
+        {description && (
+          <p className="mt-0.5 text-sm text-[#667085]">{description}</p>
+        )}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
+function Input({ label, error, hint, className = "", id, ...props }) {
+  return (
+    <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={id} className="text-sm font-medium text-[#374151]">
+        <label htmlFor={id} className="text-sm font-semibold text-[#344054]">
           {label}
         </label>
       )}
       <input
         id={id}
-        className={`px-3 py-2 border rounded-lg text-sm bg-white text-[#0F1923] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#5AC361] focus:border-[#5AC361] transition-colors ${error ? 'border-[#EF4444]' : 'border-[#E5EAF0]'} ${className}`}
+        className={`min-h-10 rounded-lg border bg-white px-3 py-2 text-sm text-[#101828] shadow-sm outline-none transition-all placeholder:text-[#98A2B3] focus:border-[#5AC361] focus:ring-4 focus:ring-[#5AC361]/10 disabled:cursor-not-allowed disabled:bg-[#F8FAFC] disabled:text-[#98A2B3] ${error ? "border-[#F04438] focus:border-[#F04438] focus:ring-[#F04438]/10" : "border-[#DCE3EA]"} ${className}`}
+        aria-invalid={Boolean(error)}
         {...props}
       />
-      {error && <span className="text-xs text-[#EF4444]">{error}</span>}
+      {error ? (
+        <span className="text-xs font-medium text-[#D92D20]">{error}</span>
+      ) : hint ? (
+        <span className="text-xs text-[#667085]">{hint}</span>
+      ) : null}
     </div>
-  )
+  );
 }
-function Select({ label, options, placeholder, className = '', id, ...props }) {
+
+function Select({
+  label,
+  options,
+  placeholder,
+  error,
+  hint,
+  className = "",
+  id,
+  ...props
+}) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={id} className="text-sm font-medium text-[#374151]">
+        <label htmlFor={id} className="text-sm font-semibold text-[#344054]">
           {label}
         </label>
       )}
       <select
         id={id}
-        className={`px-3 py-2 border border-[#E5EAF0] rounded-lg text-sm bg-white text-[#0F1923] focus:outline-none focus:ring-2 focus:ring-[#5AC361] focus:border-[#5AC361] transition-colors ${className}`}
+        className={`min-h-10 rounded-lg border bg-white px-3 py-2 text-sm text-[#101828] shadow-sm outline-none transition-all focus:border-[#5AC361] focus:ring-4 focus:ring-[#5AC361]/10 disabled:cursor-not-allowed disabled:bg-[#F8FAFC] ${error ? "border-[#F04438]" : "border-[#DCE3EA]"} ${className}`}
+        aria-invalid={Boolean(error)}
         {...props}
       >
         {placeholder && <option value="">{placeholder}</option>}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
+      {error ? (
+        <span className="text-xs font-medium text-[#D92D20]">{error}</span>
+      ) : hint ? (
+        <span className="text-xs text-[#667085]">{hint}</span>
+      ) : null}
     </div>
-  )
+  );
 }
-function Textarea({ label, className = '', id, rows = 3, ...props }) {
+
+function Textarea({
+  label,
+  error,
+  hint,
+  className = "",
+  id,
+  rows = 3,
+  ...props
+}) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={id} className="text-sm font-medium text-[#374151]">
+        <label htmlFor={id} className="text-sm font-semibold text-[#344054]">
           {label}
         </label>
       )}
       <textarea
         id={id}
         rows={rows}
-        className={`px-3 py-2 border border-[#E5EAF0] rounded-lg text-sm bg-white text-[#0F1923] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#5AC361] focus:border-[#5AC361] transition-colors resize-none ${className}`}
+        className={`rounded-lg border bg-white px-3 py-2 text-sm text-[#101828] shadow-sm outline-none transition-all placeholder:text-[#98A2B3] focus:border-[#5AC361] focus:ring-4 focus:ring-[#5AC361]/10 disabled:cursor-not-allowed disabled:bg-[#F8FAFC] disabled:text-[#98A2B3] ${error ? "border-[#F04438] focus:border-[#F04438] focus:ring-[#F04438]/10" : "border-[#DCE3EA]"} ${className}`}
+        aria-invalid={Boolean(error)}
         {...props}
       />
+      {error ? (
+        <span className="text-xs font-medium text-[#D92D20]">{error}</span>
+      ) : hint ? (
+        <span className="text-xs text-[#667085]">{hint}</span>
+      ) : null}
     </div>
-  )
+  );
 }
-function StatCard({ label, value, icon, accent }) {
+
+function StatCard({ label, value, icon, accent, description, className = "" }) {
   return (
-    <Card className="p-5 flex items-center gap-4">
-      <div
-        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${accent ? 'bg-[#EBF8EC] text-[#5AC361]' : 'bg-[#F0F4F8] text-[#6B7280]'}`}
-      >
-        {icon}
-      </div>
-      <div>
-        <p className="text-xs text-[#6B7280] font-medium uppercase tracking-wide">{label}</p>
-        <p
-          className="text-2xl font-bold text-[#0F1923]"
-          style={{ fontFamily: 'Outfit, sans-serif' }}
+    <Card className={`p-4 sm:p-5 ${className}`}>
+      <div className="flex items-start gap-3.5">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${accent ? "bg-[#EBF8EC] text-[#3EA646]" : "bg-[#F2F4F7] text-[#667085]"}`}
         >
-          {value}
-        </p>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">
+            {label}
+          </p>
+          <p className="mt-1 font-heading text-2xl font-bold tracking-[-0.02em] text-[#101828]">
+            {value}
+          </p>
+          {description && (
+            <p className="mt-1 text-xs leading-5 text-[#667085]">
+              {description}
+            </p>
+          )}
+        </div>
       </div>
     </Card>
-  )
+  );
 }
-function Table({ headers, children }) {
+
+function Table({ headers, children, className = "" }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className={`overflow-x-auto ${className}`}>
+      <table className="w-full min-w-full text-sm">
         <thead>
-          <tr className="border-b border-[#E5EAF0]">
-            {headers.map((h) => (
+          <tr className="border-b border-[#E5EAF0] bg-[#F8FAFC]">
+            {headers.map((header) => (
               <th
-                key={h}
-                className="px-4 py-3 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider whitespace-nowrap"
+                key={header}
+                className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#667085]"
               >
-                {h}
+                {header}
               </th>
             ))}
           </tr>
@@ -178,23 +299,33 @@ function Table({ headers, children }) {
         <tbody className="divide-y divide-[#F0F4F8]">{children}</tbody>
       </table>
     </div>
-  )
+  );
 }
-function Tr({ children, className = '' }) {
-  return <tr className={`hover:bg-[#F7F9FB] transition-colors ${className}`}>{children}</tr>
+
+function Tr({ children, className = "" }) {
+  return (
+    <tr className={`transition-colors hover:bg-[#FAFBFC] ${className}`}>
+      {children}
+    </tr>
+  );
 }
-function Td({ children, className = '' }) {
-  return <td className={`px-4 py-3 text-[#374151] whitespace-nowrap ${className}`}>{children}</td>
+
+function Td({ children, className = "" }) {
+  return (
+    <td className={`px-4 py-3.5 text-[#344054] ${className}`}>{children}</td>
+  );
 }
+
 function ConfidentialityBanner() {
   return (
-    <div className="flex items-center gap-2 px-4 py-2.5 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg text-sm text-[#1D4ED8]">
+    <div className="flex items-start gap-2.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-sm text-[#1D4ED8]">
       <svg
-        className="w-4 h-4 flex-shrink-0"
+        className="mt-0.5 h-4 w-4 shrink-0"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
         strokeWidth={2}
+        aria-hidden="true"
       >
         <path
           strokeLinecap="round"
@@ -202,15 +333,19 @@ function ConfidentialityBanner() {
           d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
         />
       </svg>
-      <span>Contact details are hidden. All communication is routed through EPR Nexus.</span>
+      <span className="leading-5">
+        Contact details are hidden. All communication is routed through EPR
+        Nexus.
+      </span>
     </div>
-  )
+  );
 }
+
 function CreditTypeIcon({ type }) {
   const icons = {
     Battery: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -226,7 +361,7 @@ function CreditTypeIcon({ type }) {
     ),
     Plastic: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -237,12 +372,16 @@ function CreditTypeIcon({ type }) {
           strokeLinejoin="round"
           d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"
         />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"
+        />
       </svg>
     ),
-    'E-Waste': (
+    "E-Waste": (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -257,7 +396,7 @@ function CreditTypeIcon({ type }) {
     ),
     ELV: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -270,9 +409,9 @@ function CreditTypeIcon({ type }) {
         />
       </svg>
     ),
-    'Used Oil': (
+    "Used Oil": (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -287,7 +426,7 @@ function CreditTypeIcon({ type }) {
     ),
     Tyre: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -298,19 +437,249 @@ function CreditTypeIcon({ type }) {
         <path strokeLinecap="round" d="M12 3v3M12 18v3M3 12h3M18 12h3" />
       </svg>
     ),
-  }
-  return <>{icons[type] ?? icons['Battery']}</>
+  };
+
+  return <>{icons[type] ?? icons.Battery}</>;
 }
+
+function DashboardShell({
+  nav,
+  active,
+  onActiveChange,
+  onNavigate,
+  titleFallback = "Dashboard",
+  roleLabel,
+  displayName,
+  secondaryText,
+  initial,
+  badges = {},
+  actions,
+  children,
+  variant = "light",
+}) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const dark = variant === "dark";
+  const activeItem = nav.find((item) => item.id === active);
+  const sidebarClasses = dark
+    ? "bg-[#0F1923] border-white/10 text-white"
+    : "bg-white border-[#E5EAF0] text-[#0F1923]";
+
+  const closeSidebar = () => setSidebarOpen(false);
+  const handleActiveChange = (id) => {
+    onActiveChange(id);
+    closeSidebar();
+  };
+
+  return (
+    <div
+      className={`min-h-screen flex ${dark ? "bg-[#F7F9FB]" : "bg-[#F7F9FB]"}`}
+    >
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col border-r shadow-[8px_0_24px_rgba(15,25,35,0.04)] transition-transform duration-200 md:relative md:translate-x-0 md:shadow-none ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } ${sidebarClasses}`}
+        aria-label={`${roleLabel || "Application"} navigation`}
+      >
+        <div
+          className={`flex h-[72px] items-center gap-3 border-b px-5 ${dark ? "border-white/10" : "border-[#E5EAF0]"}`}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#5AC361] shadow-[0_4px_12px_rgba(90,195,97,0.20)]">
+            <svg
+              className="h-4.5 w-4.5 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+              />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <p
+              className={`font-heading text-sm font-bold leading-none ${dark ? "text-white" : "text-[#0F1923]"}`}
+            >
+              EPR Nexus
+            </p>
+            <p
+              className={`mt-1 text-[10px] leading-none ${dark ? "text-white/45" : "text-[#8A94A3]"}`}
+            >
+              {roleLabel || "Portal"}
+            </p>
+          </div>
+        </div>
+
+        <div
+          className={`border-b px-5 py-4 ${dark ? "border-white/10" : "border-[#E5EAF0]"}`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${dark ? "bg-[#5AC361] text-white" : "bg-[#EBF8EC] text-[#3EA646]"}`}
+            >
+              {initial || "?"}
+            </div>
+            <div className="min-w-0">
+              <p
+                className={`truncate text-xs font-semibold ${dark ? "text-white" : "text-[#344054]"}`}
+              >
+                {displayName || "Account"}
+              </p>
+              <p
+                className={`mt-0.5 truncate text-[10px] ${dark ? "text-white/40" : "text-[#98A2B3]"}`}
+              >
+                {secondaryText || roleLabel || "Account"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <nav
+          className="flex-1 overflow-y-auto px-3 py-4"
+          aria-label="Dashboard sections"
+        >
+          <p
+            className={`px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] ${dark ? "text-white/30" : "text-[#98A2B3]"}`}
+          >
+            Workspace
+          </p>
+          <div className="space-y-1">
+            {nav.map((item) => {
+              const count = Number(badges[item.id] || 0);
+              const isActive = active === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleActiveChange(item.id)}
+                  className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361] focus-visible:ring-offset-1 ${
+                    isActive
+                      ? dark
+                        ? "bg-[#5AC361] text-white shadow-sm"
+                        : "bg-[#EBF8EC] text-[#26702B]"
+                      : dark
+                        ? "text-white/60 hover:bg-white/10 hover:text-white"
+                        : "text-[#667085] hover:bg-[#F7F9FB] hover:text-[#1F2937]"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${isActive ? (dark ? "bg-white/15" : "bg-white") : dark ? "bg-white/5" : "bg-[#F7F9FB]"}`}
+                    >
+                      {item.icon || (
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                      )}
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  {count > 0 && (
+                    <span
+                      className={`ml-2 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${isActive ? (dark ? "bg-white/20 text-white" : "bg-white text-[#26702B]") : "bg-[#EF4444] text-white"}`}
+                    >
+                      {count > 99 ? "99+" : count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        <div
+          className={`border-t p-3 ${dark ? "border-white/10" : "border-[#E5EAF0]"}`}
+        >
+          <button
+            type="button"
+            onClick={() => onNavigate("home")}
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361] ${dark ? "text-white/50 hover:bg-white/10 hover:text-white" : "text-[#667085] hover:bg-[#F7F9FB] hover:text-[#1F2937]"}`}
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-current/5">
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+            </span>
+            Back to Home
+          </button>
+        </div>
+      </aside>
+
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-[#0F1923]/40 backdrop-blur-[1px] md:hidden"
+          onClick={closeSidebar}
+        />
+      )}
+
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-0 z-20 flex min-h-[72px] items-center justify-between gap-3 border-b border-[#E5EAF0] bg-white/95 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#667085] transition-colors hover:bg-[#F2F4F7] hover:text-[#1F2937] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361] md:hidden"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open navigation"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">
+                {roleLabel || "Workspace"}
+              </p>
+              <h1 className="truncate font-heading text-lg font-semibold tracking-[-0.015em] text-[#101828]">
+                {activeItem?.label || titleFallback}
+              </h1>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {actions}
+          </div>
+        </header>
+        <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8">{children}</div>
+      </main>
+    </div>
+  );
+}
+
 function EmptyState({ title, desc, action }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-      <div className="w-12 h-12 rounded-full bg-[#F0F4F8] flex items-center justify-center text-[#9CA3AF]">
+    <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#E5EAF0] bg-[#F8FAFC] text-[#98A2B3]">
         <svg
-          className="w-6 h-6"
+          className="h-6 w-6"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth={1.5}
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -320,27 +689,29 @@ function EmptyState({ title, desc, action }) {
         </svg>
       </div>
       <div>
-        <p className="font-semibold text-[#374151]" style={{ fontFamily: 'Outfit, sans-serif' }}>
-          {title}
-        </p>
-        <p className="text-sm text-[#6B7280] mt-1">{desc}</p>
+        <p className="font-heading font-semibold text-[#344054]">{title}</p>
+        <p className="mt-1 max-w-md text-sm leading-5 text-[#667085]">{desc}</p>
       </div>
       {action}
     </div>
-  )
+  );
 }
+
 export {
   Badge,
+  DashboardShell,
   Button,
   Card,
   ConfidentialityBanner,
   CreditTypeIcon,
   EmptyState,
   Input,
+  PageHeader,
+  SectionHeader,
   Select,
   StatCard,
   Table,
   Td,
   Textarea,
   Tr,
-}
+};

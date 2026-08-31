@@ -17,6 +17,8 @@ function MarketplacePage({ onNavigate }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [watchlistIds, setWatchlistIds] = useState(new Set());
+  const [watchlistBusyId, setWatchlistBusyId] = useState("");
 
   const [filters, setFilters] = useState({
     type: "",
@@ -54,6 +56,67 @@ function MarketplacePage({ onNavigate }) {
     fetchListings();
   }, []);
 
+  useEffect(() => {
+    if (user?.role !== "buyer") {
+      setWatchlistIds(new Set());
+      return;
+    }
+
+    const fetchWatchlistIds = async () => {
+      try {
+        const response = await api.get("/watchlist/ids");
+        if (response.data.success) {
+          setWatchlistIds(new Set(response.data.listingIds || []));
+        }
+      } catch (error) {
+        console.error("Failed to load watchlist:", error);
+      }
+    };
+
+    fetchWatchlistIds();
+  }, [user?.role]);
+
+  const toggleWatchlist = async (listingId, event) => {
+    event?.stopPropagation();
+
+    if (!user) {
+      onNavigate("auth");
+      return;
+    }
+
+    if (user.role !== "buyer") {
+      return;
+    }
+
+    const id = String(listingId);
+    const saved = watchlistIds.has(id);
+
+    try {
+      setWatchlistBusyId(id);
+
+      if (saved) {
+        await api.delete(`/watchlist/${id}`);
+        setWatchlistIds((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+      } else {
+        await api.post("/watchlist", { listingId: id });
+        setWatchlistIds((current) => new Set([...current, id]));
+      }
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          (saved
+            ? "Failed to remove listing from watchlist."
+            : "Failed to save listing."),
+      );
+    } finally {
+      setWatchlistBusyId("");
+    }
+  };
+
   const states = [
     "Delhi",
     "Gujarat",
@@ -71,12 +134,10 @@ function MarketplacePage({ onNavigate }) {
       Array.from(
         new Set([
           ...CREDIT_TYPES,
-          ...listings
-            .map((listing) => listing.category)
-            .filter(Boolean),
-        ])
+          ...listings.map((listing) => listing.category).filter(Boolean),
+        ]),
       ),
-    [listings]
+    [listings],
   );
   const filtered = useMemo(() => {
     const result = listings.filter((listing) => {
@@ -256,11 +317,49 @@ function MarketplacePage({ onNavigate }) {
                       }
                     />
                   </div>
-                  <span className="text-xs text-[#9CA3AF]">
-                    {credit.sellerId?.company ||
-                      credit.sellerId?.name ||
-                      "Verified Seller"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="max-w-[120px] truncate text-xs text-[#9CA3AF]">
+                      {credit.sellerId?.company ||
+                        credit.sellerId?.name ||
+                        "Verified Seller"}
+                    </span>
+                    {(user?.role === "buyer" || !user) && (
+                      <button
+                        type="button"
+                        onClick={(e) => toggleWatchlist(credit._id, e)}
+                        disabled={watchlistBusyId === String(credit._id)}
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                          watchlistIds.has(String(credit._id))
+                            ? "border-[#A5D6A7] bg-[#EBF8EC] text-[#2E7D32]"
+                            : "border-[#E5EAF0] bg-white text-[#98A2B3] hover:border-[#C8D1DB] hover:text-[#475467]"
+                        }`}
+                        aria-label={
+                          watchlistIds.has(String(credit._id))
+                            ? "Remove from watchlist"
+                            : "Save to watchlist"
+                        }
+                        title={
+                          watchlistIds.has(String(credit._id))
+                            ? "Remove from watchlist"
+                            : "Save to watchlist"
+                        }
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill={
+                            watchlistIds.has(String(credit._id))
+                              ? "currentColor"
+                              : "none"
+                          }
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={1.8}
+                        >
+                          <path d="M6 4.75A2.75 2.75 0 018.75 2h6.5A2.75 2.75 0 0118 4.75V21l-6-3.5L6 21V4.75z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -355,7 +454,7 @@ function MarketplacePage({ onNavigate }) {
                   </div>
                 </div>
 
-                {user?.role === 'seller' ? (
+                {user?.role === "seller" ? (
                   <button
                     type="button"
                     disabled
@@ -383,10 +482,14 @@ function MarketplacePage({ onNavigate }) {
         {!loading && !error && filtered.length === 0 && (
           <div className="text-center py-20 text-[#9CA3AF]">
             <p className="text-lg font-semibold text-[#374151]">
-              {listings.length === 0 ? "No active listings available" : "No credits match your filters"}
+              {listings.length === 0
+                ? "No active listings available"
+                : "No credits match your filters"}
             </p>
             <p className="text-sm mt-1">
-              {listings.length === 0 ? "Approved seller listings will appear here." : "Try adjusting or clearing your filters"}
+              {listings.length === 0
+                ? "Approved seller listings will appear here."
+                : "Try adjusting or clearing your filters"}
             </p>
           </div>
         )}

@@ -35,6 +35,7 @@ const notificationSchema = new mongoose.Schema(
         "offer_updated",
         "offer_accepted",
         "purchase_request_created",
+        "requirement_match_found",
       ],
       required: true,
       index: true,
@@ -80,6 +81,13 @@ const notificationSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    dedupeKey: {
+      type: String,
+      default: null,
+      sparse: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -88,6 +96,7 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ recipient: 1, createdAt: -1 });
 notificationSchema.index({ recipient: 1, read: 1, createdAt: -1 });
+notificationSchema.index({ dedupeKey: 1 }, { unique: true, sparse: true });
 
 const Notification = mongoose.model(
   "Notification",

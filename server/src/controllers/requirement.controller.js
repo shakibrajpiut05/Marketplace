@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import BuyerRequirement from "../models/BuyerRequirement.js";
 import SellerListing from "../models/SellerListing.js";
 import { createActivityLog } from "../services/activityLog.service.js";
+import { notifyMatchesForRequirement } from "../services/matching.service.js";
 
 const categoryMap = {
   plastic: "Plastic",
@@ -81,6 +82,10 @@ export const createRequirement = async (req, res) => {
       complianceYear: complianceYear.trim(),
       notes: notes?.trim() || "",
       status: "open",
+    });
+
+    void notifyMatchesForRequirement(requirement._id).catch((error) => {
+      console.error("Requirement match notification error:", error);
     });
 
     return res.status(201).json({

@@ -15,6 +15,7 @@ export const createNotification = async ({
   entityType = null,
   entityId = null,
   metadata = {},
+  dedupeKey = null,
 }) => {
   if (!recipient) {
     return null;
@@ -30,8 +31,10 @@ export const createNotification = async ({
       entityType,
       entityId,
       metadata,
+      dedupeKey,
     });
   } catch (error) {
+    if (error?.code === 11000 && dedupeKey) return null;
     console.error("Create notification error:", error);
     return null;
   }

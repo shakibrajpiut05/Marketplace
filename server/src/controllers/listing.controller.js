@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import SellerListing from "../models/SellerListing.js";
 import Document from "../models/Document.js";
 import { createActivityLog } from "../services/activityLog.service.js";
+import { notifyMatchesForListing } from "../services/matching.service.js";
 
 /*
 
@@ -39,6 +40,11 @@ location,
 complianceYear,
 validTill,
 description,
+certificateNumber,
+sourcePortal,
+certificateQuantity,
+certificateIssuedDate,
+certificateValidTill,
 } = req.body || {};
 
 /*
@@ -102,7 +108,12 @@ if (
   !price ||
   !location ||
   !complianceYear ||
-  !validTill
+  !validTill ||
+  !certificateNumber?.trim() ||
+  !sourcePortal?.trim() ||
+  !certificateQuantity ||
+  !certificateIssuedDate ||
+  !certificateValidTill
 ) {
   return res.status(400).json({
     success: false,
@@ -140,6 +151,15 @@ const parsedPrice =
 const parsedValidTill =
   new Date(validTill);
 
+const parsedCertificateQuantity =
+  Number(certificateQuantity);
+
+const parsedCertificateIssuedDate =
+  new Date(certificateIssuedDate);
+
+const parsedCertificateValidTill =
+  new Date(certificateValidTill);
+
 if (
   !Number.isFinite(
     parsedQuantity
@@ -163,6 +183,44 @@ if (
     success: false,
     message:
       "Price must be a valid positive number",
+  });
+}
+
+if (
+  !Number.isFinite(parsedCertificateQuantity) ||
+  parsedCertificateQuantity <= 0
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Certificate quantity must be a valid positive number",
+  });
+}
+
+if (Number.isNaN(parsedCertificateIssuedDate.getTime())) {
+  return res.status(400).json({
+    success: false,
+    message: "Certificate issue date must be valid",
+  });
+}
+
+if (Number.isNaN(parsedCertificateValidTill.getTime())) {
+  return res.status(400).json({
+    success: false,
+    message: "Certificate validity date must be valid",
+  });
+}
+
+if (parsedCertificateIssuedDate > parsedCertificateValidTill) {
+  return res.status(400).json({
+    success: false,
+    message: "Certificate issue date cannot be after certificate validity date",
+  });
+}
+
+if (parsedCertificateValidTill < new Date()) {
+  return res.status(400).json({
+    success: false,
+    message: "Certificate validity date must be in the future",
   });
 }
 
@@ -205,6 +263,20 @@ const document =
       req.file.mimetype,
     fileSize:
       req.file.size,
+    certificateNumber:
+      certificateNumber.trim(),
+    sourcePortal:
+      sourcePortal.trim(),
+    certificateQuantity:
+      parsedCertificateQuantity,
+    certificateIssuedDate:
+      parsedCertificateIssuedDate,
+    certificateValidTill:
+      parsedCertificateValidTill,
+    certificateCategory:
+      normalizedCategory,
+    certificateComplianceYear:
+      complianceYear.trim(),
     verificationStatus:
       "pending",
   });
@@ -303,7 +375,7 @@ status: "pending_review",
 )
 .populate(
 "documentId",
-"fileName fileUrl mimeType fileSize verificationStatus createdAt"
+"fileName fileUrl mimeType fileSize verificationStatus createdAt certificateNumber sourcePortal certificateQuantity certificateIssuedDate certificateValidTill certificateCategory certificateComplianceYear"
 )
 .sort({
 createdAt: -1,
@@ -422,6 +494,65 @@ if (
 
 /*
 |--------------------------------------------------------------------------
+| Verify structured certificate metadata before publishing
+|--------------------------------------------------------------------------
+*/
+
+const listingDocument = await Document.findById(listing.documentId);
+
+if (status === "active") {
+  if (!listingDocument || listingDocument.type !== "epr_certificate") {
+    return res.status(400).json({
+      success: false,
+      message: "A valid EPR certificate document is required before approval",
+    });
+  }
+
+  const categoryMatches =
+    listingDocument.certificateCategory?.trim().toLowerCase() ===
+    listing.category.trim().toLowerCase();
+
+  const yearMatches =
+    listingDocument.certificateComplianceYear?.trim() ===
+    listing.complianceYear.trim();
+
+  const quantityCoversListing =
+    Number(listingDocument.certificateQuantity) >= Number(listing.quantity);
+
+  const validityCoversListing =
+    listingDocument.certificateValidTill &&
+    new Date(listingDocument.certificateValidTill) >= new Date(listing.validTill);
+
+  const certificateComplete =
+    Boolean(listingDocument.certificateNumber?.trim()) &&
+    Boolean(listingDocument.sourcePortal?.trim()) &&
+    Number.isFinite(Number(listingDocument.certificateQuantity)) &&
+    listingDocument.certificateIssuedDate &&
+    listingDocument.certificateValidTill;
+
+  if (!certificateComplete) {
+    return res.status(400).json({
+      success: false,
+      message: "Certificate metadata is incomplete. The seller must provide certificate number, source, quantity and validity dates.",
+    });
+  }
+
+  if (!categoryMatches || !yearMatches || !quantityCoversListing || !validityCoversListing) {
+    return res.status(400).json({
+      success: false,
+      message: "Certificate details do not match the listing. Review the category, compliance year, quantity and validity before approval.",
+      verification: {
+        categoryMatches,
+        yearMatches,
+        quantityCoversListing,
+        validityCoversListing,
+      },
+    });
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
 | Prevent publishing a zero quantity listing
 |--------------------------------------------------------------------------
 */
@@ -458,7 +589,7 @@ await listing.save();
 |--------------------------------------------------------------------------
 */
 
-const document =
+const document = listingDocument ||
   await Document.findById(
     listing.documentId
   );
@@ -511,6 +642,12 @@ await createActivityLog({
     complianceYear: listing.complianceYear,
   },
 });
+
+if (status === "active") {
+  void notifyMatchesForListing(listing._id).catch((error) => {
+    console.error("Listing match notification error:", error);
+  });
+}
 
 return res.status(200).json({
   success: true,
@@ -605,7 +742,7 @@ let query =
     )
     .populate(
       "documentId",
-      "fileName fileUrl verificationStatus"
+      "fileName fileUrl verificationStatus certificateNumber sourcePortal certificateQuantity certificateIssuedDate certificateValidTill certificateCategory certificateComplianceYear"
     );
 
 switch (sort) {
@@ -757,43 +894,54 @@ and sold listings.
 
 */
 
-export const getSellerListings = async (
-req,
-res
-) => {
-try {
-const listings =
-await SellerListing.find({
-sellerId:
-req.user._id,
-})
-.populate(
-"documentId",
-"fileName fileUrl verificationStatus rejectionReason"
-)
-.sort({
-createdAt: -1,
-});
+export const getSellerListings = async (req, res) => {
+  try {
+    const listings = await SellerListing.find({
+      sellerId: req.user._id,
+    })
+      .populate(
+        "documentId",
+        "fileName fileUrl verificationStatus rejectionReason"
+      )
+      .sort({ createdAt: -1 });
 
-return res.status(200).json({
-  success: true,
-  count: listings.length,
-  listings,
-});
+    const formattedListings = listings.map((listing) => {
+      // Backward compatibility for old listings
+      const totalQuantity =
+        listing.totalQuantity ?? listing.quantity ?? 0;
 
-} catch (error) {
-console.error(
-"Get seller listings error:",
-error
-);
+      const reservedQuantity =
+        listing.reservedQuantity ?? 0;
 
-return res.status(500).json({
-  success: false,
-  message:
-    "Failed to fetch seller listings",
-});
+      const availableQuantity = Math.max(
+        totalQuantity - reservedQuantity,
+        0
+      );
 
-}
+      return {
+        ...listing.toObject(),
+        totalQuantity,
+        reservedQuantity,
+        availableQuantity,
+      };
+    });
+
+    res.json({
+      success: true,
+      listings: formattedListings,
+    });
+  } catch (error) {
+    console.error("Get seller listings error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch seller listings",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : undefined,
+    });
+  }
 };
 
 /*

@@ -4,7 +4,10 @@ import crypto from "crypto";
 import User from "../models/User.js";
 import { generateToken } from "../utils/generateToken.js";
 import { GOOGLE_CLIENT_ID } from "../config/env.js";
-import { sendEmailVerification } from "../services/email.service.js";
+import {
+  sendEmailVerification,
+  sendPasswordResetEmail,
+} from "../services/email.service.js";
 
 const publicUserFields = (user) => ({
   id: user._id,
@@ -696,3 +699,112 @@ export const changeSignupEmail = async (req, res) => {
     });
   }
 };
+
+//-------------------------------------------PASSWORD RESET-----------------------------------------
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const normalizedEmail = String(req.body?.email || "")
+      .toLowerCase()
+      .trim();
+
+    // Always return the same response so this endpoint cannot be used to
+    // discover whether an email address has an EPR Nexus account.
+    const genericResponse = {
+      success: true,
+      message:
+        "If an account with that email exists, a password reset link has been sent.",
+    };
+
+    if (!normalizedEmail) {
+      return res.status(200).json(genericResponse);
+    }
+
+    const user = await User.findOne({ email: normalizedEmail }).select(
+      "+passwordResetTokenHash +passwordResetExpires +password",
+    );
+
+    if (!user || !user.isActive || user.authProvider === "google") {
+      return res.status(200).json(genericResponse);
+    }
+
+    const { rawToken, tokenHash } = createVerificationToken();
+
+    user.passwordResetTokenHash = tokenHash;
+    user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
+    await user.save();
+
+    const emailResult = await sendPasswordResetEmail({
+      email: user.email,
+      name: user.name,
+      token: rawToken,
+    });
+
+    // Development-only convenience. Never expose reset tokens in production.
+    if (process.env.NODE_ENV !== "production" && !emailResult.sent) {
+      return res.status(200).json({
+        ...genericResponse,
+        developmentResetUrl: emailResult.resetUrl,
+      });
+    }
+
+    return res.status(200).json(genericResponse);
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    return res.status(200).json({
+      success: true,
+      message:
+        "If an account with that email exists, a password reset link has been sent.",
+    });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token and new password are required",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters long",
+      });
+    }
+
+    const user = await User.findOne({
+      passwordResetTokenHash: hashToken(token),
+      passwordResetExpires: { $gt: new Date() },
+    }).select("+passwordResetTokenHash +passwordResetExpires +password");
+
+    if (!user || !user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "This password reset link is invalid or has expired",
+      });
+    }
+
+    user.password = await bcrypt.hash(password, 12);
+    user.passwordResetTokenHash = null;
+    user.passwordResetExpires = null;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Your password has been reset successfully. You can now sign in.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reset password. Please request a new link.",
+    });
+  }
+};
+

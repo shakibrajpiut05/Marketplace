@@ -1,0 +1,22 @@
+import express from "express";
+import { protect } from "../middleware/auth.middleware.js";
+import { authorize } from "../middleware/role.middleware.js";
+import {
+  getDisputes,
+  getDisputeById,
+  getDealDispute,
+  createDispute,
+  respondToDispute,
+  updateDisputeStatus,
+} from "../controllers/dispute.controller.js";
+
+const router = express.Router();
+
+router.get("/", protect, authorize("buyer", "seller", "admin"), getDisputes);
+router.get("/deal/:dealId", protect, authorize("buyer", "seller", "admin"), getDealDispute);
+router.get("/:disputeId", protect, authorize("buyer", "seller", "admin"), getDisputeById);
+router.post("/deal/:dealId", protect, authorize("buyer", "seller"), createDispute);
+router.patch("/:disputeId/respond", protect, authorize("buyer", "seller"), respondToDispute);
+router.patch("/:disputeId/status", protect, authorize("admin"), updateDisputeStatus);
+
+export default router;

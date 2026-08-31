@@ -17,7 +17,7 @@ const router = express.Router();
 router.get(
   "/requirements/:requirementId/matches",
   protect,
-  authorize("admin"),
+  authorize("admin", "buyer"),
   getRequirementMatches
 );
 

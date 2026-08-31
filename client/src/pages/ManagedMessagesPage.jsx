@@ -46,8 +46,19 @@ export default function ManagedMessagesPage({ initialRequestId = "", onRead }) {
     }
   };
 
-  useEffect(() => { loadRequests(); }, []);
-  useEffect(() => { loadThread(); }, [selectedId]);
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  useEffect(() => {
+    if (initialRequestId) {
+      setSelectedId(initialRequestId);
+    }
+  }, [initialRequestId]);
+
+  useEffect(() => {
+    loadThread();
+  }, [selectedId]);
 
   const selected = useMemo(() => requests.find((item) => item._id === selectedId) || null, [requests, selectedId]);
 

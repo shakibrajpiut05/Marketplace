@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Deal from "../models/Deal.js";
+import Payment from "../models/Payment.js";
 import BuyerRequirement from "../models/BuyerRequirement.js";
 import SellerListing from "../models/SellerListing.js";
 import PurchaseRequest from "../models/PurchaseRequest.js";
@@ -50,7 +51,7 @@ Inventory is RESERVED when the deals are created.
 
 export const createDealsFromRequirement = async (req, res) => {
 try {
-const { requirementId, commissionRate = 2 } = req.body || {};
+const { requirementId, commissionAmount: requestedCommissionAmount = 0 } = req.body || {};
 
 /*
 |--------------------------------------------------------------------------
@@ -110,17 +111,19 @@ if (
 }
 
 /*
+/*
 |--------------------------------------------------------------------------
-| Validate commission rate
+| Validate fixed EPR Nexus commission
 |--------------------------------------------------------------------------
 */
 
-const rate = Number(commissionRate);
+const fixedCommission = Number(requestedCommissionAmount);
 
-if (!Number.isFinite(rate) || rate < 0) {
+if (!Number.isFinite(fixedCommission) || fixedCommission < 0) {
   return res.status(400).json({
     success: false,
-    message: "Commission rate must be a valid non-negative number",
+    message: "Commission amount must be a valid non-negative number",
+    code: "INVALID_COMMISSION_AMOUNT",
   });
 }
 
@@ -264,7 +267,9 @@ for (const match of requirement.matchedListings) {
   |--------------------------------------------------------------------------
   */
 
-  const commissionAmount = (totalValue * rate) / 100;
+  const commissionAmount = Math.round(fixedCommission * 100) / 100;
+  const creditSubtotal = Math.round(totalValue * 100) / 100;
+  const finalAmount = Math.round((creditSubtotal + commissionAmount) * 100) / 100;
 
   /*
   |--------------------------------------------------------------------------
@@ -290,9 +295,13 @@ for (const match of requirement.matchedListings) {
 
       agreedPrice,
 
-      commissionRate: rate,
+      // Kept for backward compatibility. Commission is a fixed amount.
+      commissionRate: 0,
 
       commissionAmount,
+      creditSubtotal,
+      serviceFee: commissionAmount,
+      finalAmount,
 
       /*
         |--------------------------------------------------------------------------
@@ -400,7 +409,7 @@ try {
 const {
 requestId,
 agreedPrice,
-commissionRate = 2,
+commissionAmount: requestedCommissionAmount = 0,
 notes = "",
 } = req.body || {};
 
@@ -560,7 +569,7 @@ if (!reservedListing) {
 
 const price = Number(agreedPrice ?? reservedListing.price);
 
-const rate = Number(commissionRate);
+const fixedCommission = Number(requestedCommissionAmount);
 
 if (!Number.isFinite(price) || price <= 0) {
   /*
@@ -586,27 +595,16 @@ if (!Number.isFinite(price) || price <= 0) {
   });
 }
 
-if (!Number.isFinite(rate) || rate < 0) {
-  /*
-  |--------------------------------------------------------------------------
-  | Release reservation on validation failure
-  |--------------------------------------------------------------------------
-  */
-
+if (!Number.isFinite(fixedCommission) || fixedCommission < 0) {
   await SellerListing.updateOne(
-    {
-      _id: reservedListing._id,
-    },
-    {
-      $inc: {
-        reservedQuantity: -requestedQuantity,
-      },
-    },
+    { _id: reservedListing._id },
+    { $inc: { reservedQuantity: -requestedQuantity } },
   );
 
   return res.status(400).json({
     success: false,
-    message: "Commission rate must be a valid non-negative number",
+    message: "Commission amount must be a valid non-negative number",
+    code: "INVALID_COMMISSION_AMOUNT",
   });
 }
 
@@ -618,7 +616,9 @@ if (!Number.isFinite(rate) || rate < 0) {
 
 const totalValue = requestedQuantity * price;
 
-const commissionAmount = (totalValue * rate) / 100;
+const commissionAmount = Math.round(fixedCommission * 100) / 100;
+const creditSubtotal = Math.round(totalValue * 100) / 100;
+const finalAmount = Math.round((creditSubtotal + commissionAmount) * 100) / 100;
 
 /*
 |--------------------------------------------------------------------------
@@ -640,9 +640,13 @@ try {
 
     agreedPrice: price,
 
-    commissionRate: rate,
+// Kept for backward compatibility. Commission is a fixed amount.
+commissionRate: 0,
 
-    commissionAmount,
+commissionAmount,
+creditSubtotal,
+serviceFee: commissionAmount,
+finalAmount,
 
     inventoryReserved: true,
 
@@ -792,492 +796,434 @@ Deal cancelled
 */
 
 export const updateDealStatus = async (req, res) => {
-try {
-const { dealId } = req.params;
+  try {
+    const { dealId } = req.params;
+    const { status, paymentStatus } = req.body || {};
 
-const { status, paymentStatus } = req.body || {};
-
-/*
-|--------------------------------------------------------------------------
-| Allowed statuses
-|--------------------------------------------------------------------------
-*/
-
-const allowedStatuses = [
-  "matched",
-  "negotiating",
-  "terms_agreed",
-  "payment_coordination",
-  "completed",
-  "cancelled",
-];
-
-if (!allowedStatuses.includes(status)) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid deal status",
-  });
-}
-
-/*
-|--------------------------------------------------------------------------
-| Find deal
-|--------------------------------------------------------------------------
-*/
-
-const deal = await Deal.findById(dealId);
-
-if (!deal) {
-  return res.status(404).json({
-    success: false,
-    message: "Deal not found",
-  });
-}
-
-/*
-|--------------------------------------------------------------------------
-| Remember previous status
-|--------------------------------------------------------------------------
-*/
-
-const previousStatus = deal.status;
-const previousPaymentStatus = deal.paymentStatus;
-
-/*
-|--------------------------------------------------------------------------
-| Prevent invalid state changes
-|--------------------------------------------------------------------------
-*/
-
-const statusOrder = [
-  "matched",
-  "negotiating",
-  "terms_agreed",
-  "payment_coordination",
-  "completed",
-];
-
-/*
-|--------------------------------------------------------------------------
-| Do not allow completed → cancelled
-|--------------------------------------------------------------------------
-*/
-
-if (previousStatus === "completed" && status === "cancelled") {
-  return res.status(400).json({
-    success: false,
-    message: "Completed deals cannot be cancelled",
-  });
-}
-
-if (status === "completed" && paymentStatus !== "received" && previousPaymentStatus !== "received") {
-  return res.status(400).json({
-    success: false,
-    message: "A deal cannot be completed until payment is confirmed as received",
-  });
-}
-
-/*
-|--------------------------------------------------------------------------
-| Do not move ordinary deals backwards
-|--------------------------------------------------------------------------
-*/
-
-if (previousStatus !== "cancelled" && status !== "cancelled") {
-  const currentIndex = statusOrder.indexOf(previousStatus);
-
-  const nextIndex = statusOrder.indexOf(status);
-
-  if (currentIndex !== -1 && nextIndex !== -1 && nextIndex < currentIndex) {
-    return res.status(400).json({
-      success: false,
-      message: "Deal status cannot move backwards",
-    });
-  }
-}
-
-/*
-|--------------------------------------------------------------------------
-| Validate payment status
-|--------------------------------------------------------------------------
-*/
-
-const allowedPaymentStatuses = [
-  "pending",
-  "initiated",
-  "received",
-  "failed",
-];
-
-if (paymentStatus && !allowedPaymentStatuses.includes(paymentStatus)) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid payment status",
-  });
-}
-
-/*
-|--------------------------------------------------------------------------
-| Detect state transitions
-|--------------------------------------------------------------------------
-*/
-
-const isCompletingNow =
-  status === "completed" && previousStatus !== "completed";
-
-const isCancellingNow =
-  status === "cancelled" && previousStatus !== "cancelled";
-
-/*
-|--------------------------------------------------------------------------
-| Validate quantity
-|--------------------------------------------------------------------------
-*/
-
-const dealQuantity = Number(deal.quantity || 0);
-
-if (
-  (isCompletingNow || isCancellingNow) &&
-  (!Number.isFinite(dealQuantity) || dealQuantity <= 0)
-) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid deal quantity",
-  });
-}
-
-/*
-|--------------------------------------------------------------------------
-| COMPLETE DEAL
-|--------------------------------------------------------------------------
-*/
-
-if (isCompletingNow) {
-  /*
-  |--------------------------------------------------------------------------
-  | Consume listing inventory
-  |--------------------------------------------------------------------------
-  |
-  | New reservation-aware deals:
-  |   quantity          -= dealQuantity
-  |   reservedQuantity  -= dealQuantity
-  |
-  | Legacy deals:
-  |   inventoryReserved is false, but the listing still needs to consume
-  |   the completed quantity. This keeps old deals from leaving the
-  |   marketplace showing inventory that has already been sold.
-  |--------------------------------------------------------------------------
-  */
-
-  const listingBeforeCompletion =
-    await SellerListing.findById(deal.listingId);
-
-  if (!listingBeforeCompletion) {
-    return res.status(404).json({
-      success: false,
-      message: "Listing associated with this deal was not found",
-    });
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | Establish immutable total listed quantity for older listings
-  |--------------------------------------------------------------------------
-  |
-  | New listings already have totalQuantity populated by the model hook.
-  | For an older listing without totalQuantity, the current quantity is
-  | the best known original quantity at this transition point.
-  |--------------------------------------------------------------------------
-  */
-
-  if (listingBeforeCompletion.totalQuantity == null) {
-    listingBeforeCompletion.totalQuantity =
-      Number(listingBeforeCompletion.quantity || 0);
-
-    await listingBeforeCompletion.save();
-  }
-
-  if (deal.inventoryReserved) {
-    const listing = await SellerListing.findOneAndUpdate(
-      {
-        _id: deal.listingId,
-
-        $expr: {
-          $gte: [
-            {
-              $ifNull: ["$reservedQuantity", 0],
-            },
-            dealQuantity,
-          ],
-        },
-
-        quantity: {
-          $gte: dealQuantity,
-        },
-      },
-      {
-        $inc: {
-          quantity: -dealQuantity,
-          reservedQuantity: -dealQuantity,
-        },
-      },
-      {
-        new: true,
-      },
-    );
-
-    if (!listing) {
-      return res.status(409).json({
+    if (!mongoose.Types.ObjectId.isValid(dealId)) {
+      return res.status(400).json({
         success: false,
-        message: "Unable to consume reserved listing inventory",
+        message: "A valid dealId is required",
+        code: "INVALID_DEAL_ID",
       });
     }
 
-    if (listing.quantity === 0) {
-      listing.status = "sold";
-      await listing.save();
+    const allowedStatuses = [
+      "matched",
+      "negotiating",
+      "terms_agreed",
+      "payment_coordination",
+      "completed",
+      "cancelled",
+    ];
+
+    const allowedPaymentStatuses = [
+      "pending",
+      "initiated",
+      "received",
+      "failed",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid deal status",
+        code: "INVALID_DEAL_STATUS",
+      });
     }
 
-    deal.inventoryReserved = false;
-  } else {
+    if (
+      paymentStatus !== undefined &&
+      !allowedPaymentStatuses.includes(paymentStatus)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment status",
+        code: "INVALID_PAYMENT_STATUS",
+      });
+    }
+
+    const deal = await Deal.findById(dealId);
+
+    if (!deal) {
+      return res.status(404).json({
+        success: false,
+        message: "Deal not found",
+        code: "DEAL_NOT_FOUND",
+      });
+    }
+
+    const previousStatus = deal.status;
+    const previousPaymentStatus = deal.paymentStatus;
+
     /*
-    |--------------------------------------------------------------------------
-    | Legacy completion path
-    |--------------------------------------------------------------------------
-    |
-    | Older deals can reach completion with inventoryReserved=false.
-    | Those deals were previously left untouched by the old controller,
-    | which is the reason a completed 20 MT deal could leave a 100 MT
-    | listing showing 100 MT available.
-    |--------------------------------------------------------------------------
-    */
-
-    const listing = await SellerListing.findOneAndUpdate(
-      {
-        _id: deal.listingId,
-        quantity: {
-          $gte: dealQuantity,
-        },
-      },
-      {
-        $inc: {
-          quantity: -dealQuantity,
-        },
-      },
-      {
-        new: true,
-      },
-    );
-
-    if (!listing) {
+     * ----------------------------------------------------------------------
+     * IMMUTABILITY
+     * ----------------------------------------------------------------------
+     *
+     * A completed deal is the final business state. It cannot be edited or
+     * cancelled. A cancelled deal is also terminal.
+     */
+    if (previousStatus === "completed") {
       return res.status(409).json({
         success: false,
-        message: "Unable to consume legacy listing inventory",
+        message: "Completed deals cannot be modified",
+        code: "DEAL_ALREADY_COMPLETED",
       });
     }
 
-    if (listing.quantity === 0) {
-      listing.status = "sold";
-      await listing.save();
-    }
-  }
-
-  deal.completedAt = new Date();
-}
-
-/*
-|--------------------------------------------------------------------------
-| CANCEL DEAL
-|--------------------------------------------------------------------------
-*/
-
-if (isCancellingNow) {
-  /*
-  |--------------------------------------------------------------------------
-  | Release reservation only if this deal currently
-  | holds one.
-  |--------------------------------------------------------------------------
-  */
-
-  if (deal.inventoryReserved && deal.listingId) {
-    const listing = await SellerListing.findOneAndUpdate(
-      {
-        _id: deal.listingId,
-
-        $expr: {
-          $gte: [
-            {
-              $ifNull: ["$reservedQuantity", 0],
-            },
-            dealQuantity,
-          ],
-        },
-      },
-      {
-        $inc: {
-          reservedQuantity: -dealQuantity,
-        },
-      },
-      {
-        new: true,
-      },
-    );
-
-    if (!listing) {
+    if (previousStatus === "cancelled") {
       return res.status(409).json({
         success: false,
-        message: "Unable to release reserved listing inventory",
+        message: "Cancelled deals cannot be modified",
+        code: "DEAL_ALREADY_CANCELLED",
       });
     }
 
     /*
-    |--------------------------------------------------------------------------
-    | If the listing was previously marked sold
-    | but still has quantity, restore active status.
-    |--------------------------------------------------------------------------
-    */
-
-    if (listing.status === "sold" && listing.quantity > 0) {
-      listing.status = "active";
-
-      await listing.save();
-    }
-
-    deal.inventoryReserved = false;
-  }
-}
-
-/*
-|--------------------------------------------------------------------------
-| Update deal status
-|--------------------------------------------------------------------------
-*/
-
-deal.status = status;
-
-/*
-|--------------------------------------------------------------------------
-| Update payment status
-|--------------------------------------------------------------------------
-*/
-
-if (paymentStatus) {
-  deal.paymentStatus = paymentStatus;
-}
-
-/*
-|--------------------------------------------------------------------------
-| Save deal
-|--------------------------------------------------------------------------
-*/
-
-await deal.save();
-
-await createActivityLog({
-  actorId: req.user?._id,
-  action: "deal_status_changed",
-  entityType: "deal",
-  entityId: deal._id,
-  before: {
-    status: previousStatus,
-    paymentStatus: previousPaymentStatus,
-  },
-  after: {
-    status: deal.status,
-    paymentStatus: deal.paymentStatus,
-  },
-  metadata: {
-    quantity: deal.quantity,
-    agreedPrice: deal.agreedPrice,
-    commissionRate: deal.commissionRate,
-    commissionAmount: deal.commissionAmount,
-    inventoryReserved: deal.inventoryReserved,
-  },
-});
-
-/*
-|--------------------------------------------------------------------------
-| Keep PurchaseRequest in sync
-|--------------------------------------------------------------------------
-|
-| Requirement-based deals have requestId = null.
-| Therefore we skip this completely for those deals.
-|--------------------------------------------------------------------------
-*/
-
-if (deal.requestId) {
-  const request = await PurchaseRequest.findById(deal.requestId);
-
-  if (request) {
-    const requestStatusMap = {
-      matched: "matched",
-
-      negotiating: "negotiating",
-
-      terms_agreed: "approved",
-
-      payment_coordination: "approved",
-
-      completed: "completed",
-
-      cancelled: "cancelled",
+     * ----------------------------------------------------------------------
+     * STATE MACHINE
+     * ----------------------------------------------------------------------
+     *
+     * Normal forward flow:
+     *
+     * matched
+     *   -> negotiating
+     *   -> terms_agreed
+     *   -> payment_coordination
+     *   -> completed
+     *
+     * Cancellation is intentionally allowed from any non-terminal state,
+     * including after payment has been received. Refund/settlement handling
+     * is a separate business operation and must not be silently inferred.
+     */
+    const transitions = {
+      matched: ["matched", "negotiating", "cancelled"],
+      negotiating: ["negotiating", "terms_agreed", "cancelled"],
+      terms_agreed: ["terms_agreed", "payment_coordination", "cancelled"],
+      payment_coordination: [
+        "payment_coordination",
+        "completed",
+        "cancelled",
+      ],
     };
 
-    const nextRequestStatus = requestStatusMap[status];
-
-    if (nextRequestStatus) {
-      request.status = nextRequestStatus;
-
-      await request.save();
+    if (!transitions[previousStatus]?.includes(status)) {
+      return res.status(409).json({
+        success: false,
+        message: `Invalid deal transition from "${previousStatus}" to "${status}"`,
+        code: "INVALID_DEAL_TRANSITION",
+        currentStatus: previousStatus,
+      });
     }
+
+    /*
+     * ----------------------------------------------------------------------
+     * PAYMENT STATE RULES
+     * ----------------------------------------------------------------------
+     *
+     * Quotation/deal acceptance does NOT mean payment was received.
+     *
+     * Payment may progress:
+     * pending -> initiated -> received
+     * pending -> failed
+     * initiated -> failed
+     *
+     * Once received, it cannot be silently moved backwards.
+     */
+    const requestedPaymentStatus =
+      paymentStatus === undefined ? previousPaymentStatus : paymentStatus;
+
+    const paymentTransitions = {
+      pending: ["pending", "initiated", "failed", "received"],
+      initiated: ["initiated", "received", "failed"],
+      failed: ["failed", "initiated", "received"],
+      received: ["received"],
+    };
+
+    if (
+      !paymentTransitions[previousPaymentStatus]?.includes(
+        requestedPaymentStatus,
+      )
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: `Invalid payment transition from "${previousPaymentStatus}" to "${requestedPaymentStatus}"`,
+        code: "INVALID_PAYMENT_TRANSITION",
+        currentPaymentStatus: previousPaymentStatus,
+      });
+    }
+
+    /*
+     * Payment can only be marked received as part of a legitimate deal
+     * lifecycle. In particular, don't allow a brand-new matched deal to
+     * jump straight to "payment received".
+     */
+    if (
+      requestedPaymentStatus === "received" &&
+      !["terms_agreed", "payment_coordination"].includes(previousStatus)
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Payment cannot be marked received before the commercial terms are agreed",
+        code: "PAYMENT_TOO_EARLY",
+      });
+    }
+
+    let paymentRecord = null;
+
+    if (requestedPaymentStatus === "received") {
+      paymentRecord = await Payment.findOne({ dealId: deal._id });
+
+      if (!paymentRecord || !["initiated", "received"].includes(paymentRecord.status)) {
+        return res.status(409).json({
+          success: false,
+          message: "Payment must be initiated through the payment workflow before it can be confirmed",
+          code: "PAYMENT_RECORD_REQUIRED",
+        });
+      }
+    }
+
+    /*
+     * Completion requires:
+     *   1. paymentStatus = received
+     *   2. current status = payment_coordination
+     *
+     * Therefore accepting a quotation can never directly complete a deal.
+     */
+    if (status === "completed") {
+      const effectivePaymentStatus =
+        paymentStatus === undefined ? previousPaymentStatus : paymentStatus;
+
+      if (effectivePaymentStatus !== "received") {
+        return res.status(409).json({
+          success: false,
+          message:
+            "A deal cannot be completed until payment is confirmed as received",
+          code: "PAYMENT_REQUIRED_BEFORE_COMPLETION",
+        });
+      }
+
+      if (previousStatus !== "payment_coordination") {
+        return res.status(409).json({
+          success: false,
+          message:
+            "A deal must be in payment coordination before it can be completed",
+          code: "INVALID_COMPLETION_STAGE",
+        });
+      }
+    }
+
+    const dealQuantity = Number(deal.quantity || 0);
+
+    if (
+      (status === "completed" || status === "cancelled") &&
+      (!Number.isFinite(dealQuantity) || dealQuantity <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid deal quantity",
+        code: "INVALID_DEAL_QUANTITY",
+      });
+    }
+
+    /*
+     * ----------------------------------------------------------------------
+     * COMPLETION
+     * ----------------------------------------------------------------------
+     *
+     * Consume exactly the quantity reserved by this deal.
+     *
+     * The inventory update is conditional on both quantity and
+     * reservedQuantity so a stale/inconsistent database cannot silently
+     * oversell inventory.
+     */
+    if (status === "completed") {
+      if (!deal.inventoryReserved) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This deal does not have a valid inventory reservation and cannot be completed",
+          code: "INVENTORY_RESERVATION_MISSING",
+        });
+      }
+
+      const listing = await SellerListing.findOneAndUpdate(
+        {
+          _id: deal.listingId,
+          status: { $in: ["active", "sold"] },
+          quantity: { $gte: dealQuantity },
+          $expr: {
+            $gte: [
+              { $ifNull: ["$reservedQuantity", 0] },
+              dealQuantity,
+            ],
+          },
+        },
+        {
+          $inc: {
+            quantity: -dealQuantity,
+            reservedQuantity: -dealQuantity,
+          },
+        },
+        {
+          new: true,
+        },
+      );
+
+      if (!listing) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Unable to consume reserved listing inventory. The listing quantity and reservation are inconsistent.",
+          code: "INVENTORY_RESERVATION_MISMATCH",
+        });
+      }
+
+      if (listing.quantity === 0) {
+        listing.status = "sold";
+        await listing.save();
+      }
+
+      deal.inventoryReserved = false;
+      deal.completedAt = new Date();
+    }
+
+    /*
+     * ----------------------------------------------------------------------
+     * CANCELLATION
+     * ----------------------------------------------------------------------
+     *
+     * Cancellation is allowed even after payment has been received.
+     * Payment/refund settlement is deliberately NOT changed automatically.
+     * That needs a separate payment/refund workflow.
+     */
+    if (status === "cancelled" && deal.inventoryReserved && deal.listingId) {
+      const listing = await SellerListing.findOneAndUpdate(
+        {
+          _id: deal.listingId,
+          $expr: {
+            $gte: [
+              { $ifNull: ["$reservedQuantity", 0] },
+              dealQuantity,
+            ],
+          },
+        },
+        {
+          $inc: {
+            reservedQuantity: -dealQuantity,
+          },
+        },
+        {
+          new: true,
+        },
+      );
+
+      if (!listing) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Unable to release reserved listing inventory. The reservation is inconsistent.",
+          code: "INVENTORY_RELEASE_FAILED",
+        });
+      }
+
+      if (listing.status === "sold" && listing.quantity > 0) {
+        listing.status = "active";
+        await listing.save();
+      }
+
+      deal.inventoryReserved = false;
+    }
+
+    deal.status = status;
+
+    if (paymentStatus !== undefined) {
+      deal.paymentStatus = paymentStatus;
+    }
+
+    await deal.save();
+
+    if (paymentRecord && requestedPaymentStatus === "received") {
+      paymentRecord.status = "received";
+      paymentRecord.receivedAt = paymentRecord.receivedAt || new Date();
+      paymentRecord.confirmedBy = req.user?._id || null;
+      await paymentRecord.save();
+    }
+
+    await createActivityLog({
+      actorId: req.user?._id,
+      action: "deal_status_changed",
+      entityType: "deal",
+      entityId: deal._id,
+      before: {
+        status: previousStatus,
+        paymentStatus: previousPaymentStatus,
+      },
+      after: {
+        status: deal.status,
+        paymentStatus: deal.paymentStatus,
+      },
+      metadata: {
+        quantity: deal.quantity,
+        agreedPrice: deal.agreedPrice,
+        commissionRate: deal.commissionRate,
+        commissionAmount: deal.commissionAmount,
+        serviceFee: deal.serviceFee,
+        creditSubtotal: deal.creditSubtotal,
+        finalAmount: deal.finalAmount,
+        inventoryReserved: deal.inventoryReserved,
+      },
+    });
+
+    /*
+     * Keep the legacy PurchaseRequest flow synchronized.
+     */
+    if (deal.requestId) {
+      const request = await PurchaseRequest.findById(deal.requestId);
+
+      if (request) {
+        const requestStatusMap = {
+          matched: "matched",
+          negotiating: "negotiating",
+          terms_agreed: "approved",
+          payment_coordination: "approved",
+          completed: "completed",
+          cancelled: "cancelled",
+        };
+
+        const nextRequestStatus = requestStatusMap[status];
+
+        if (nextRequestStatus) {
+          request.status = nextRequestStatus;
+          await request.save();
+        }
+      }
+    }
+
+    await notifyDealStatusChange({
+      deal,
+      status: deal.status,
+      paymentStatus: deal.paymentStatus,
+      actor: req.user?._id || null,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Deal updated successfully",
+      deal,
+    });
+  } catch (error) {
+    console.error("Update deal status error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update deal",
+      code: "DEAL_UPDATE_FAILED",
+    });
   }
-}
-
-await notifyDealStatusChange({
-  deal,
-  status: deal.status,
-  paymentStatus: deal.paymentStatus,
-  actor: req.user?._id || null,
-});
-
-/*
-|--------------------------------------------------------------------------
-| Return updated deal
-|--------------------------------------------------------------------------
-*/
-
-return res.status(200).json({
-  success: true,
-  message: "Deal updated successfully",
-  deal,
-});
-
-} catch (error) {
-console.error("Update deal status error:", error);
-
-return res.status(500).json({
-  success: false,
-  message: "Failed to update deal",
-});
-
-}
 };
-
-/*
-
-GET SELLER DEALS
-
---------------------------------------------------------------------------
-
-
-
-Sellers only see their own deals.
-
-Buyer private contact information is never returned.
-
---------------------------------------------------------------------------
-
-*/
 
 export const getSellerDeals = async (req, res) => {
 try {

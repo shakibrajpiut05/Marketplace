@@ -1,8 +1,8 @@
-
 import express from "express";
 
 import { protect } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
+import { requireVerifiedBuyer } from "../middleware/verifiedUser.middleware.js";
 
 import {
   createRequirement,
@@ -17,6 +17,7 @@ router.post(
   "/",
   protect,
   authorize("buyer"),
+  requireVerifiedBuyer,
   createRequirement,
 );
 

@@ -20,6 +20,11 @@ function AddListingPage({ onNavigate }) {
     year: "2025-26",
     validTill: "",
     description: "",
+    certificateNumber: "",
+    sourcePortal: "",
+    certificateQuantity: "",
+    certificateIssuedDate: "",
+    certificateValidTill: "",
   });
   const states = [
     "Delhi",
@@ -109,6 +114,54 @@ function AddListingPage({ onNavigate }) {
       return;
     }
 
+    if (!form.certificateNumber.trim()) {
+      alert("Please enter the certificate / credit registration number.");
+      setStep(1);
+      return;
+    }
+
+    if (!form.sourcePortal) {
+      alert("Please select the source portal.");
+      setStep(1);
+      return;
+    }
+
+    if (!form.certificateQuantity || Number(form.certificateQuantity) <= 0) {
+      alert("Please enter the quantity shown on the certificate.");
+      setStep(1);
+      return;
+    }
+
+    if (!form.certificateIssuedDate || !form.certificateValidTill) {
+      alert("Please enter both certificate issue and validity dates.");
+      setStep(1);
+      return;
+    }
+
+    if (new Date(form.certificateIssuedDate) > new Date(form.certificateValidTill)) {
+      alert("Certificate issue date cannot be after its validity date.");
+      setStep(1);
+      return;
+    }
+
+    if (new Date(form.certificateValidTill) < new Date()) {
+      alert("Certificate validity date must be in the future.");
+      setStep(1);
+      return;
+    }
+
+    if (Number(form.certificateQuantity) < Number(form.quantity)) {
+      alert("Certificate quantity must cover the quantity you are listing.");
+      setStep(1);
+      return;
+    }
+
+    if (new Date(form.certificateValidTill) < new Date(form.validTill)) {
+      alert("Listing validity cannot extend beyond the certificate validity.");
+      setStep(1);
+      return;
+    }
+
     if (!uploadedFile) {
       alert("Please upload the proof document.");
       setStep(1);
@@ -125,6 +178,11 @@ function AddListingPage({ onNavigate }) {
       formData.append("complianceYear", form.year);
       formData.append("validTill", form.validTill);
       formData.append("description", form.description || "");
+      formData.append("certificateNumber", form.certificateNumber.trim());
+      formData.append("sourcePortal", form.sourcePortal);
+      formData.append("certificateQuantity", form.certificateQuantity);
+      formData.append("certificateIssuedDate", form.certificateIssuedDate);
+      formData.append("certificateValidTill", form.certificateValidTill);
       formData.append("document", uploadedFile);
 
       console.log("FORM DATA:");
@@ -400,6 +458,56 @@ function AddListingPage({ onNavigate }) {
               will go live only after admin verification.
             </p>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+              <Input
+                label="Certificate / Credit ID *"
+                placeholder="e.g. EPR-2026-00124"
+                value={form.certificateNumber}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, certificateNumber: e.target.value }))
+                }
+              />
+              <Select
+                label="Source Portal *"
+                options={[
+                  { label: "CPCB Portal", value: "CPCB Portal" },
+                  { label: "State PCB Portal", value: "State PCB Portal" },
+                  { label: "Other Authorized Registry", value: "Other Authorized Registry" },
+                ]}
+                placeholder="Select source"
+                value={form.sourcePortal}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, sourcePortal: e.target.value }))
+                }
+              />
+              <Input
+                label="Certificate Quantity (MT) *"
+                type="number"
+                min="0"
+                placeholder="Quantity shown on certificate"
+                value={form.certificateQuantity}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, certificateQuantity: e.target.value }))
+                }
+              />
+              <Input
+                label="Certificate Issue Date *"
+                type="date"
+                value={form.certificateIssuedDate}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, certificateIssuedDate: e.target.value }))
+                }
+              />
+              <Input
+                label="Certificate Valid Till *"
+                type="date"
+                value={form.certificateValidTill}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, certificateValidTill: e.target.value }))
+                }
+              />
+            </div>
+
             {/* Upload zone */}
             <label
               className={`block border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${uploadedFile ? "border-[#5AC361] bg-[#EBF8EC]" : "border-[#E5EAF0] hover:border-[#5AC361] hover:bg-[#F7FFF8]"}`}
@@ -546,6 +654,13 @@ function AddListingPage({ onNavigate }) {
                   { label: "Location", value: form.location || "Not set" },
                   { label: "Compliance Year", value: form.year },
                   { label: "Valid Till", value: form.validTill || "Not set" },
+                  { label: "Certificate ID", value: form.certificateNumber || "Not set" },
+                  { label: "Source Portal", value: form.sourcePortal || "Not set" },
+                  {
+                    label: "Certificate Quantity",
+                    value: form.certificateQuantity ? `${form.certificateQuantity} MT` : "Not set",
+                  },
+                  { label: "Certificate Valid Till", value: form.certificateValidTill || "Not set" },
                 ].map((row) => (
                   <div key={row.label} className="flex flex-col gap-0.5">
                     <span className="text-xs text-[#9CA3AF]">{row.label}</span>

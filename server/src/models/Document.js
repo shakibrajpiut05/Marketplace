@@ -42,6 +42,48 @@ const documentSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Structured EPR certificate metadata used for listing verification.
+    // Optional at schema level so existing documents remain valid.
+    certificateNumber: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    sourcePortal: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    certificateQuantity: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
+    certificateIssuedDate: {
+      type: Date,
+      default: null,
+    },
+
+    certificateValidTill: {
+      type: Date,
+      default: null,
+    },
+
+    certificateCategory: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    certificateComplianceYear: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     verificationStatus: {
       type: String,
       enum: ["pending", "approved", "rejected"],

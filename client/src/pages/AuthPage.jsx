@@ -83,10 +83,10 @@ function GoogleButton({ onCredential, disabled }) {
   );
 }
 
-function AuthPage({ onNavigate }) {
+function AuthPage({ onNavigate, initialMode = "login" }) {
   const { login, register, googleLogin, startSignupSession } = useAuth();
 
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState(initialMode);
   const [role, setRole] = useState("buyer");
   const [form, setForm] = useState({
     name: "",
@@ -384,6 +384,18 @@ function AuthPage({ onNavigate }) {
                 }))
               }
             />
+
+            {mode === "login" && (
+              <div className="-mt-1 text-right">
+                <button
+                  type="button"
+                  className="text-sm font-medium text-[#2E7D32] hover:underline"
+                  onClick={() => onNavigate("forgot-password")}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
 
             <Button
               className="w-full"

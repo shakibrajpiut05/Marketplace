@@ -1,7 +1,19 @@
-
 import api from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import { NotificationBell, ProfileMenu } from "../components/AccountTools.jsx";
-import { Badge, Button, Card, StatCard, Table, Tr, Td } from "../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  PageHeader,
+  SectionHeader,
+  StatCard,
+  Table,
+  Tr,
+  Td,
+} from "../components/ui";
+import { DealRoom } from "../components/DealRoom.jsx";
+import { DisputesPage } from "../components/DisputeCenter.jsx";
 import { MessageChat } from "../components/MessageCenter.jsx";
 import { useEffect, useMemo, useState } from "react";
 const NAV = [
@@ -82,6 +94,25 @@ const NAV = [
     ),
   },
   {
+    id: "disputes",
+    label: "Disputes",
+    icon: (
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 9v3m0 4h.01M10.29 3.86l-7.2 12.48A2 2 0 004.82 19h14.36a2 2 0 001.73-2.66l-7.2-12.48a2 2 0 00-3.42 0z"
+        />
+      </svg>
+    ),
+  },
+  {
     id: "messages",
     label: "Messages",
     icon: (
@@ -140,6 +171,7 @@ const NAV = [
   },
 ];
 function SellerDashboard({ onNavigate }) {
+  const { user } = useAuth();
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [purchaseRequests, setPurchaseRequests] = useState([]);
@@ -150,6 +182,10 @@ function SellerDashboard({ onNavigate }) {
   const [dealError, setDealError] = useState("");
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [messageUnreadByRequest, setMessageUnreadByRequest] = useState({});
+
+  const sellerCompany = user?.company?.trim() || user?.name?.trim() || "Seller";
+  const sellerName = user?.name?.trim() || "Seller";
+  const sellerInitial = sellerCompany.slice(0, 1).toUpperCase();
 
   const fetchMessageUnread = async () => {
     try {
@@ -218,12 +254,12 @@ function SellerDashboard({ onNavigate }) {
   useEffect(() => {
     fetchPurchaseRequests();
     fetchSellerDeals();
-  }, [])
+  }, []);
   useEffect(() => {
     fetchMessageUnread();
     const interval = window.setInterval(fetchMessageUnread, 10000);
     return () => window.clearInterval(interval);
-  }, []);;
+  }, []);
 
   const [sellerListings, setSellerListings] = useState([]);
   const [listingLoading, setListingLoading] = useState(true);
@@ -253,21 +289,6 @@ function SellerDashboard({ onNavigate }) {
     fetchSellerListings();
   }, []);
 
-  const activeCount = useMemo(
-    () =>
-      sellerListings.filter((listing) => listing.status === "active").length,
-    [sellerListings],
-  );
-
-  const totalQty = useMemo(
-    () =>
-      sellerListings.reduce(
-        (sum, listing) => sum + Number(listing.quantity || 0),
-        0,
-      ),
-    [sellerListings],
-  );
-
   const rejectedListings = useMemo(
     () => sellerListings.filter((listing) => listing.status === "rejected"),
     [sellerListings],
@@ -285,6 +306,102 @@ function SellerDashboard({ onNavigate }) {
       ),
     [purchaseRequests, messageUnreadByRequest],
   );
+
+  const inventorySummary = useMemo(() => {
+    const total = sellerListings.reduce(
+      (sum, listing) =>
+        sum + Number(listing.totalQuantity ?? listing.quantity ?? 0),
+      0,
+    );
+    const available = sellerListings.reduce(
+      (sum, listing) => sum + Number(listing.quantity || 0),
+      0,
+    );
+    const reserved = sellerListings.reduce(
+      (sum, listing) => sum + Number(listing.reservedQuantity || 0),
+      0,
+    );
+    const sold = sellerListings.reduce((sum, listing) => {
+      const listingTotal = Number(
+        listing.totalQuantity ?? listing.quantity ?? 0,
+      );
+      const listingAvailable = Number(listing.quantity || 0);
+      const listingReserved = Number(listing.reservedQuantity || 0);
+      return (
+        sum + Math.max(0, listingTotal - listingAvailable - listingReserved)
+      );
+    }, 0);
+
+    return { total, available, reserved, sold };
+  }, [sellerListings]);
+
+  const actionItems = useMemo(() => {
+    const items = [];
+    const pendingListings = sellerListings.filter(
+      (listing) => listing.status === "pending_review",
+    ).length;
+    const openRequests = purchaseRequests.filter((request) =>
+      ["new", "reviewing", "matched", "negotiating"].includes(request.status),
+    ).length;
+    const unread = visibleUnreadCount;
+    const paymentDeals = sellerDeals.filter(
+      (deal) =>
+        deal.status === "payment_coordination" &&
+        ["pending", "initiated"].includes(deal.paymentStatus),
+    ).length;
+
+    if (openRequests > 0) {
+      items.push({
+        title: `${openRequests} purchase request${openRequests === 1 ? "" : "s"} need attention`,
+        description: "Review buyer requests and keep conversations moving.",
+        action: () => setActive("requests"),
+        label: "Review requests",
+        tone: "blue",
+      });
+    }
+
+    if (unread > 0) {
+      items.push({
+        title: `${unread} unread message${unread === 1 ? "" : "s"}`,
+        description: "A buyer has sent a new message in an active request.",
+        action: () => setActive("messages"),
+        label: "Open messages",
+        tone: "red",
+      });
+    }
+
+    if (paymentDeals > 0) {
+      items.push({
+        title: `${paymentDeals} deal${paymentDeals === 1 ? "" : "s"} awaiting payment`,
+        description: "Payment coordination is in progress for these deals.",
+        action: () => setActive("deals"),
+        label: "View deals",
+        tone: "amber",
+      });
+    }
+
+    if (pendingListings > 0) {
+      items.push({
+        title: `${pendingListings} listing${pendingListings === 1 ? "" : "s"} awaiting review`,
+        description: "EPR Nexus is reviewing these listings.",
+        action: () => setActive("listings"),
+        label: "View listings",
+        tone: "amber",
+      });
+    }
+
+    if (items.length === 0) {
+      items.push({
+        title: "You're all caught up",
+        description: "No urgent seller actions need your attention right now.",
+        action: () => setActive("listings"),
+        label: "View inventory",
+        tone: "green",
+      });
+    }
+
+    return items.slice(0, 3);
+  }, [sellerListings, purchaseRequests, sellerDeals, visibleUnreadCount]);
 
   return (
     <div className="min-h-screen bg-[#F7F9FB] flex">
@@ -324,13 +441,15 @@ function SellerDashboard({ onNavigate }) {
         <div className="px-4 py-3 border-b border-[#E5EAF0]">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-[#EBF8EC] text-[#5AC361] flex items-center justify-center font-bold text-sm">
-              R
+              {sellerInitial}
             </div>
-            <div>
-              <p className="text-xs font-semibold text-[#374151]">
-                Rajesh Industries
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-[#374151] truncate">
+                {sellerCompany}
               </p>
-              <p className="text-[10px] text-[#9CA3AF]">Seller #248</p>
+              <p className="text-[10px] text-[#9CA3AF] truncate">
+                {sellerName} · Seller account
+              </p>
             </div>
           </div>
         </div>
@@ -346,7 +465,10 @@ function SellerDashboard({ onNavigate }) {
               }}
               className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${active === n.id ? "bg-[#EBF8EC] text-[#2E7D32]" : "text-[#6B7280] hover:bg-[#F7F9FB] hover:text-[#374151]"}`}
             >
-              <span className="flex items-center gap-2.5">{n.icon}{n.label}</span>
+              <span className="flex items-center gap-2.5">
+                {n.icon}
+                {n.label}
+              </span>
               {n.id === "messages" && visibleUnreadCount > 0 && (
                 <span
                   className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
@@ -424,236 +546,294 @@ function SellerDashboard({ onNavigate }) {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => onNavigate("home")}>Home</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onNavigate("home")}
+            >
+              Home
+            </Button>
             <NotificationBell compact onNavigate={onNavigate} />
             <ProfileMenu compact onNavigate={onNavigate} />
             <Button size="sm" onClick={() => onNavigate("add-listing")}>
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Add New Listing
-          </Button>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add New Listing
+            </Button>
           </div>
         </div>
 
         <div className="px-4 sm:px-6 py-6 max-w-6xl">
           {active === "dashboard" && (
             <>
-              {/* Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <PageHeader
+                eyebrow="Seller workspace"
+                title={`Welcome back, ${sellerName}`}
+                description="Manage your EPR inventory, buyer requests, and active transactions from one place."
+                actions={
+                  <Button onClick={() => onNavigate("add-listing")}>
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                    Add listing
+                  </Button>
+                }
+              />
+
+              <div className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard
-                  label="Total Listings"
-                  value={sellerListings.length}
+                  label="Total inventory"
+                  value={`${inventorySummary.total.toLocaleString("en-IN")} MT`}
+                  description="Across all your listings"
                   accent
-                  icon={
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                      />
-                    </svg>
-                  }
+                  icon={<span className="text-sm font-bold">MT</span>}
                 />
                 <StatCard
-                  label="Active Listings"
-                  value={activeCount}
-                  icon={
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  }
+                  label="Available"
+                  value={`${inventorySummary.available.toLocaleString("en-IN")} MT`}
+                  description="Ready for purchase"
+                  icon={<span className="text-sm font-bold">A</span>}
                 />
                 <StatCard
-                  label="Total Quantity (MT)"
-                  value={totalQty.toLocaleString()}
-                  icon={
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                      />
-                    </svg>
-                  }
+                  label="Reserved"
+                  value={`${inventorySummary.reserved.toLocaleString("en-IN")} MT`}
+                  description="Held for active deals"
+                  icon={<span className="text-sm font-bold">R</span>}
                 />
                 <StatCard
-                  label="Deals in Progress"
-                  value={
-                    purchaseRequests.filter(
-                      (request) =>
-                        request.status === "negotiating" ||
-                        request.status === "matched" ||
-                        request.status === "reviewing",
-                    ).length
-                  }
-                  icon={
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
-                      />
-                    </svg>
-                  }
+                  label="Sold"
+                  value={`${inventorySummary.sold.toLocaleString("en-IN")} MT`}
+                  description={`${sellerDeals.filter((deal) => deal.status === "completed").length} completed deal${sellerDeals.filter((deal) => deal.status === "completed").length === 1 ? "" : "s"}`}
+                  icon={<span className="text-sm font-bold">S</span>}
                 />
               </div>
 
-              {/* Rejected alert */}
-              {rejectedListings.length > 0 && (
-                <div className="mb-5 p-4 bg-[#FEF2F2] border border-[#FECACA] rounded-xl flex items-start gap-3">
-                  <svg
-                    className="w-5 h-5 text-[#EF4444] flex-shrink-0 mt-0.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77-1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#991B1B]">
-                      {rejectedListings.length} listing
-                      {rejectedListings.length > 1 ? "s" : ""} rejected by admin
-                    </p>
-                    <p className="text-xs text-[#EF4444] mt-0.5">
-                      {rejectedListings[0]?.rejectionReason ||
-                        "Please review the rejection reason and resubmit."}
-                    </p>
-                  </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => onNavigate("add-listing")}
-                  >
-                    Resubmit
-                  </Button>
+              <section className="mb-7">
+                <SectionHeader
+                  title="Action required"
+                  description="The items most likely to need your attention next."
+                />
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {actionItems.map((item, index) => {
+                    const tone = {
+                      red: "border-[#FECACA] bg-[#FEF2F2]",
+                      blue: "border-[#BFDBFE] bg-[#EFF6FF]",
+                      amber: "border-[#FCD34D] bg-[#FFFBEB]",
+                      green: "border-[#A5D6A7] bg-[#EBF8EC]",
+                    }[item.tone];
+                    const textTone = {
+                      red: "text-[#991B1B]",
+                      blue: "text-[#1D4ED8]",
+                      amber: "text-[#92400E]",
+                      green: "text-[#2E7D32]",
+                    }[item.tone];
+                    return (
+                      <div
+                        key={`${item.title}-${index}`}
+                        className={`rounded-xl border p-4 ${tone}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className={`text-sm font-semibold ${textTone}`}>
+                              {item.title}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-[#667085]">
+                              {item.description}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={item.action}
+                            className={`shrink-0 text-xs font-bold ${textTone} hover:underline`}
+                          >
+                            {item.label}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </section>
 
-              <Card>
-                <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
-                  <h2
-                    className="font-semibold text-[#0F1923]"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    My Recent Listings
-                  </h2>
-                  <button
-                    className="text-sm text-[#5AC361] font-medium hover:underline"
-                    onClick={() => setActive("listings")}
-                  >
-                    View All →
-                  </button>
-                </div>
-                {listingLoading ? (
-                  <div className="py-10 text-center text-[#9CA3AF]">
-                    Loading your listings...
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
+                <Card className="overflow-hidden">
+                  <div className="px-5 py-4">
+                    <SectionHeader
+                      className="mb-0"
+                      title="Recent inventory"
+                      description="Your latest EPR listings and their current status."
+                      action={
+                        <button
+                          type="button"
+                          className="text-sm font-semibold text-[#3EA646] hover:underline"
+                          onClick={() => setActive("listings")}
+                        >
+                          View all →
+                        </button>
+                      }
+                    />
                   </div>
-                ) : listingError ? (
-                  <div className="py-10 text-center text-[#EF4444]">
-                    {listingError}
-                  </div>
-                ) : sellerListings.length === 0 ? (
-                  <div className="py-10 text-center text-[#9CA3AF]">
-                    You have not created any listings yet.
-                  </div>
-                ) : (
-                  <Table
-                    headers={[
-                      "Credit Type",
-                      "Quantity (MT)",
-                      "Price (₹/MT)",
-                      "Comp. Year",
-                      "Status",
-                      "Action",
-                    ]}
-                  >
-                    {sellerListings.slice(0, 5).map((listing) => (
-                      <Tr key={listing._id}>
-                        <Td>
-                          <span className="font-medium">
-                            {listing.category}
-                          </span>
-                        </Td>
-                        <Td>{listing.quantity}</Td>
-                        <Td>₹{listing.price}</Td>
-                        <Td>{listing.complianceYear}</Td>
-                        <Td>
-                          <Badge
-                            label={
-                              listing.status === "pending_review"
-                                ? "Pending"
-                                : listing.status
-                            }
-                          />
-                        </Td>
-                        <Td>
-                          {listing.status === "rejected" ? (
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              onClick={() => onNavigate("add-listing")}
-                            >
-                              Resubmit
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setActive("listings")}
-                            >
-                              View
-                            </Button>
-                          )}
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Table>
-                )}
-              </Card>
+                  {listingLoading ? (
+                    <div className="px-5 py-12 text-center text-sm text-[#667085]">
+                      Loading your inventory...
+                    </div>
+                  ) : listingError ? (
+                    <div className="px-5 py-12 text-center text-sm text-[#D92D20]">
+                      {listingError}
+                    </div>
+                  ) : sellerListings.length === 0 ? (
+                    <div className="px-5 py-12 text-center">
+                      <p className="text-sm font-semibold text-[#344054]">
+                        No listings yet
+                      </p>
+                      <p className="mt-1 text-sm text-[#667085]">
+                        Create your first listing to start receiving buyer
+                        requests.
+                      </p>
+                      <Button
+                        className="mt-4"
+                        size="sm"
+                        onClick={() => onNavigate("add-listing")}
+                      >
+                        Add your first listing
+                      </Button>
+                    </div>
+                  ) : (
+                    <Table
+                      headers={[
+                        "Credit type",
+                        "Available",
+                        "Price / MT",
+                        "Year",
+                        "Status",
+                      ]}
+                    >
+                      {sellerListings.slice(0, 5).map((listing) => (
+                        <Tr key={listing._id}>
+                          <Td>
+                            <span className="font-semibold text-[#101828]">
+                              {listing.category}
+                            </span>
+                          </Td>
+                          <Td>
+                            {Number(listing.quantity || 0).toLocaleString(
+                              "en-IN",
+                            )}{" "}
+                            MT
+                          </Td>
+                          <Td>
+                            ₹
+                            {Number(listing.price || 0).toLocaleString("en-IN")}
+                          </Td>
+                          <Td>{listing.complianceYear || "—"}</Td>
+                          <Td>
+                            <Badge
+                              label={
+                                listing.status === "pending_review"
+                                  ? "Pending"
+                                  : listing.status
+                              }
+                            />
+                          </Td>
+                        </Tr>
+                      ))}
+                    </Table>
+                  )}
+                </Card>
+
+                <Card className="p-5">
+                  <SectionHeader
+                    title="Recent deals"
+                    description="Your latest transaction activity."
+                    action={
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-[#3EA646] hover:underline"
+                        onClick={() => setActive("deals")}
+                      >
+                        View all →
+                      </button>
+                    }
+                  />
+                  {dealLoading ? (
+                    <div className="py-8 text-center text-sm text-[#667085]">
+                      Loading deals...
+                    </div>
+                  ) : dealError ? (
+                    <div className="py-8 text-center text-sm text-[#D92D20]">
+                      {dealError}
+                    </div>
+                  ) : sellerDeals.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[#DCE3EA] bg-[#F8FAFC] px-4 py-8 text-center">
+                      <p className="text-sm font-semibold text-[#344054]">
+                        No deals yet
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-[#667085]">
+                        Completed and active transactions will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {sellerDeals.slice(0, 4).map((deal) => {
+                        const statusLabel =
+                          {
+                            matched: "Matched",
+                            negotiating: "Negotiating",
+                            terms_agreed: "Terms Agreed",
+                            payment_coordination: "Payment Coordination",
+                            completed: "Completed",
+                            cancelled: "Cancelled",
+                          }[deal.status] || deal.status;
+                        return (
+                          <button
+                            key={deal._id}
+                            type="button"
+                            onClick={() => setActive("deals")}
+                            className="w-full rounded-xl border border-[#E5EAF0] p-3.5 text-left transition hover:border-[#C8D1DB] hover:bg-[#FAFBFC]"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[#101828]">
+                                  {deal.listing?.category || "EPR Credit Deal"}
+                                </p>
+                                <p className="mt-1 text-xs text-[#667085]">
+                                  #{deal._id?.slice(-8)} ·{" "}
+                                  {Number(deal.quantity || 0).toLocaleString(
+                                    "en-IN",
+                                  )}{" "}
+                                  MT
+                                </p>
+                              </div>
+                              <Badge label={statusLabel} />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+              </div>
             </>
           )}
 
@@ -792,7 +972,12 @@ function SellerDashboard({ onNavigate }) {
                           </div>
 
                           <div className="mb-4">
-                            <MessageChat requestId={request._id} role="seller" compact onRead={markRequestMessagesRead} />
+                            <MessageChat
+                              requestId={request._id}
+                              role="seller"
+                              compact
+                              onRead={markRequestMessagesRead}
+                            />
                           </div>
 
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
@@ -1033,18 +1218,47 @@ function SellerDashboard({ onNavigate }) {
                               </div>
 
                               <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">Credit Value</p>
-                                <p className="font-semibold text-[#5AC361]">₹{Number(deal.creditSubtotal ?? estimatedValue).toLocaleString("en-IN")}</p>
+                                <p className="text-xs text-[#9CA3AF] mb-1">
+                                  Credit Value
+                                </p>
+                                <p className="font-semibold text-[#5AC361]">
+                                  ₹
+                                  {Number(
+                                    deal.creditSubtotal ?? estimatedValue,
+                                  ).toLocaleString("en-IN")}
+                                </p>
                               </div>
 
                               <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">EPR Nexus Fee</p>
-                                <p className="font-medium text-[#374151]">₹{Number(deal.serviceFee ?? deal.commissionAmount ?? 0).toLocaleString("en-IN")}</p>
+                                <p className="text-xs text-[#9CA3AF] mb-1">
+                                  EPR Nexus Fee
+                                </p>
+                                <p className="font-medium text-[#374151]">
+                                  ₹
+                                  {Number(
+                                    deal.serviceFee ??
+                                      deal.commissionAmount ??
+                                      0,
+                                  ).toLocaleString("en-IN")}
+                                </p>
                               </div>
 
                               <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">Buyer Total</p>
-                                <p className="font-semibold text-[#0F1923]">₹{Number(deal.finalAmount ?? (estimatedValue + Number(deal.serviceFee ?? deal.commissionAmount ?? 0))).toLocaleString("en-IN")}</p>
+                                <p className="text-xs text-[#9CA3AF] mb-1">
+                                  Buyer Total
+                                </p>
+                                <p className="font-semibold text-[#0F1923]">
+                                  ₹
+                                  {Number(
+                                    deal.finalAmount ??
+                                      estimatedValue +
+                                        Number(
+                                          deal.serviceFee ??
+                                            deal.commissionAmount ??
+                                            0,
+                                        ),
+                                  ).toLocaleString("en-IN")}
+                                </p>
                               </div>
 
                               <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
@@ -1079,8 +1293,14 @@ function SellerDashboard({ onNavigate }) {
                               <div className="flex items-center gap-1 overflow-x-auto">
                                 {[
                                   { key: "matched", label: "Matched" },
-                                  { key: "terms_agreed", label: "Quotation Accepted" },
-                                  { key: "payment_coordination", label: "Payment Coordination" },
+                                  {
+                                    key: "terms_agreed",
+                                    label: "Quotation Accepted",
+                                  },
+                                  {
+                                    key: "payment_coordination",
+                                    label: "Payment Coordination",
+                                  },
                                   { key: "completed", label: "Completed" },
                                 ].map((stage, index, stages) => {
                                   const order = [
@@ -1146,6 +1366,10 @@ function SellerDashboard({ onNavigate }) {
                                 </p>
                               </div>
                             )}
+
+                            <div className="mt-4 flex justify-end">
+                              <DealRoom deal={deal} role="seller" />
+                            </div>
                           </div>
                         </div>
 
@@ -1174,9 +1398,17 @@ function SellerDashboard({ onNavigate }) {
             </Card>
           )}
 
+          {active === "disputes" && <DisputesPage role="seller" />}
+
           {active === "messages" && (
             <Card>
-              <div className="px-5 py-4 border-b border-[#E5EAF0]"><h2 className="font-semibold text-[#0F1923]">Messages</h2><p className="text-xs text-[#9CA3AF] mt-1">Private communication with EPR Nexus. Quotations are handled by EPR Nexus and are not part of Messages.</p></div>
+              <div className="px-5 py-4 border-b border-[#E5EAF0]">
+                <h2 className="font-semibold text-[#0F1923]">Messages</h2>
+                <p className="text-xs text-[#9CA3AF] mt-1">
+                  Private communication with EPR Nexus. Quotations are handled
+                  by EPR Nexus and are not part of Messages.
+                </p>
+              </div>
               {purchaseRequests.length === 0 ? (
                 <div className="py-16 text-center text-sm text-[#9CA3AF]">
                   No conversations yet.
@@ -1210,7 +1442,8 @@ function SellerDashboard({ onNavigate }) {
                             )}
                           </div>
                           <p className="text-xs text-[#6B7280] mt-1">
-                            {request.requestedQuantity || request.quantity || 0} MT ·{" "}
+                            {request.requestedQuantity || request.quantity || 0}{" "}
+                            MT ·{" "}
                             {unread
                               ? `${unread} unread message${
                                   unread === 1 ? "" : "s"
@@ -1236,13 +1469,25 @@ function SellerDashboard({ onNavigate }) {
             <Card>
               <div className="px-5 py-4 border-b border-[#E5EAF0]">
                 <h2 className="font-semibold text-[#0F1923]">Documents</h2>
-                <p className="text-xs text-[#9CA3AF] mt-1">Manage the documents used for EPR Nexus verification.</p>
+                <p className="text-xs text-[#9CA3AF] mt-1">
+                  Manage the documents used for EPR Nexus verification.
+                </p>
               </div>
               <div className="p-5">
                 <div className="rounded-xl border border-[#E5EAF0] bg-[#F7F9FB] p-4">
-                  <p className="text-sm font-semibold text-[#374151]">Business verification</p>
-                  <p className="text-sm text-[#6B7280] mt-1">Your verification documents are reviewed by EPR Nexus administrators.</p>
-                  <Button className="mt-4" onClick={() => onNavigate("verification")}>Open Verification</Button>
+                  <p className="text-sm font-semibold text-[#374151]">
+                    Business verification
+                  </p>
+                  <p className="text-sm text-[#6B7280] mt-1">
+                    Your verification documents are reviewed by EPR Nexus
+                    administrators.
+                  </p>
+                  <Button
+                    className="mt-4"
+                    onClick={() => onNavigate("verification")}
+                  >
+                    Open Verification
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -1252,11 +1497,16 @@ function SellerDashboard({ onNavigate }) {
             <Card>
               <div className="px-5 py-4 border-b border-[#E5EAF0]">
                 <h2 className="font-semibold text-[#0F1923]">Profile</h2>
-                <p className="text-xs text-[#9CA3AF] mt-1">Manage your seller account from the profile menu.</p>
+                <p className="text-xs text-[#9CA3AF] mt-1">
+                  Manage your seller account from the profile menu.
+                </p>
               </div>
               <div className="p-5">
                 <div className="rounded-xl border border-[#E5EAF0] bg-[#F7F9FB] p-4">
-                  <p className="text-sm text-[#6B7280]">Use the profile menu in the top navigation to view your account details and verification status.</p>
+                  <p className="text-sm text-[#6B7280]">
+                    Use the profile menu in the top navigation to view your
+                    account details and verification status.
+                  </p>
                 </div>
               </div>
             </Card>
