@@ -1,58 +1,41 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 
-const uploadDirectory = path.resolve(
-  "uploads/documents"
-);
+const uploadDirectory = path.resolve("uploads/documents");
 
 if (!fs.existsSync(uploadDirectory)) {
-  fs.mkdirSync(uploadDirectory, {
-    recursive: true,
-  });
+  fs.mkdirSync(uploadDirectory, { recursive: true });
 }
 
+const extensionByMimeType = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     cb(null, uploadDirectory);
   },
 
-  filename: (req, file, cb) => {
-    const extension = path.extname(
-      file.originalname
-    );
-
-    const baseName = path
-      .basename(
-        file.originalname,
-        extension
-      )
-      .replace(/[^a-zA-Z0-9-_]/g, "-");
-
-    cb(
-      null,
-      `${Date.now()}-${baseName}${extension}`
-    );
+  filename: (_req, file, cb) => {
+    const extension = extensionByMimeType[file.mimetype] || ".bin";
+    cb(null, `${crypto.randomUUID()}${extension}`);
   },
 });
 
-const allowedMimeTypes = [
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-];
+const allowedMimeTypes = Object.keys(extensionByMimeType);
 
-const fileFilter = (req, file, cb) => {
+const fileFilter = (_req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
-  } else {
-    cb(
-      new Error(
-        "Only PDF, JPG, PNG and WEBP files are allowed"
-      )
-    );
+    return;
   }
+
+  cb(new Error("Only PDF, JPG, PNG and WEBP files are allowed"));
 };
 
 export const uploadDocument = multer({
@@ -60,5 +43,6 @@ export const uploadDocument = multer({
   fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024,
+    files: 1,
   },
 });

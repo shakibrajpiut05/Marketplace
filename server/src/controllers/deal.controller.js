@@ -1197,6 +1197,35 @@ export const updateDealStatus = async (req, res) => {
 
         if (nextRequestStatus) {
           request.status = nextRequestStatus;
+
+          // A terminal deal makes any later/stale quotation non-actionable.
+          // If the current quotation is the one locked into this deal, keep it
+          // visibly accepted; otherwise supersede the stale revision.
+          if (status === "completed" && request.offer?.version) {
+            const dealQuotationVersion = Number(deal.quotationVersion || 0);
+            const currentOfferVersion = Number(request.offer.version || 0);
+
+            if (dealQuotationVersion && currentOfferVersion === dealQuotationVersion) {
+              request.offer.status = "accepted";
+              request.offer.acceptedAt = request.offer.acceptedAt || deal.createdAt || new Date();
+              const historyItem = request.offerHistory?.find(
+                (item) => Number(item.version) === currentOfferVersion,
+              );
+              if (historyItem) {
+                historyItem.status = "accepted";
+                historyItem.acceptedAt = historyItem.acceptedAt || request.offer.acceptedAt;
+              }
+            } else if (["sent", "draft"].includes(request.offer.status)) {
+              request.offer.status = "superseded";
+              const historyItem = request.offerHistory?.find(
+                (item) => Number(item.version) === currentOfferVersion,
+              );
+              if (historyItem && historyItem.status === "sent") {
+                historyItem.status = "superseded";
+              }
+            }
+          }
+
           await request.save();
         }
       }
@@ -1246,6 +1275,7 @@ createdAt: -1,
 
 const sellerDeals = deals.map((deal) => ({
   _id: deal._id,
+  requestId: deal.requestId?._id || deal.requestId || null,
 
   listing: deal.listingId
     ? {
@@ -1357,6 +1387,7 @@ createdAt: -1,
 
 const buyerDeals = deals.map((deal) => ({
   _id: deal._id,
+  requestId: deal.requestId?._id || deal.requestId || null,
 
   listing: deal.listingId
     ? {

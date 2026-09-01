@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CREDIT_TYPES } from "../data/mock";
 import api from "../services/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -20,6 +21,211 @@ import { MessageChat } from "../components/MessageCenter.jsx";
 import { QuotationCard } from "../components/QuotationCenter.jsx";
 import { DealRoom } from "../components/DealRoom.jsx";
 import { DisputesPage } from "../components/DisputeCenter.jsx";
+import { DealsSection } from "../components/DealsSection.jsx";
+import { TransactionWorkflow } from "../components/TransactionWorkflow.jsx";
+function CompactBuyerRequests({
+  requests,
+  deals,
+  loading,
+  error,
+  onRetry,
+  onOpenQuotation,
+  onOpenDeals,
+  onOpenMessages,
+}) {
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
+
+  const getState = (request) => {
+    const deal = deals.find((item) => String(item.requestId || "") === String(request._id));
+    const status = String(request.status || "").toLowerCase();
+    const hasQuotation = request.offer?.finalAmount != null;
+    const accepted = Boolean(request.offer?.acceptedAt);
+    const closed = ["rejected", "cancelled", "closed", "completed"].includes(status);
+
+    if (closed) {
+      return { key: "closed", label: status === "completed" ? "Completed" : "Closed", next: "No action required", action: null, deal };
+    }
+    if (deal || accepted) {
+      return { key: "deal", label: "Deal created", next: "Continue in Deal Room", action: "deal", deal };
+    }
+    if (hasQuotation) {
+      return { key: "quotation", label: "Quotation ready", next: "Review and accept quotation", action: "quotation", deal };
+    }
+    return { key: "waiting", label: "Waiting", next: "Await quotation", action: null, deal };
+  };
+
+  const items = requests.map((request) => ({ request, ...getState(request) }));
+  const counts = {
+    all: items.length,
+    waiting: items.filter((item) => item.key === "waiting").length,
+    quotation: items.filter((item) => item.key === "quotation").length,
+    deal: items.filter((item) => item.key === "deal").length,
+    closed: items.filter((item) => item.key === "closed").length,
+  };
+
+  const visible = items.filter(({ request, key, label }) => {
+    const matchesFilter = filter === "all" || key === filter;
+    const q = query.trim().toLowerCase();
+    if (!matchesFilter) return false;
+    if (!q) return true;
+    return [
+      request._id,
+      request.listing?.category,
+      request.listing?.location,
+      request.status,
+      label,
+    ].filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+
+  const statusClasses = {
+    waiting: "bg-[#FFF7E8] text-[#9A6700] border-[#F4D7A1]",
+    quotation: "bg-[#ECFDF3] text-[#087443] border-[#B7E4C7]",
+    deal: "bg-[#EEF4FF] text-[#175CD3] border-[#C7D7FE]",
+    closed: "bg-[#F2F4F7] text-[#475467] border-[#D0D5DD]",
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <div className="space-y-3 p-5">
+          <div className="h-5 w-36 animate-pulse rounded bg-[#F2F4F7]" />
+          <div className="h-16 animate-pulse rounded-xl bg-[#F8FAFC]" />
+          <div className="h-16 animate-pulse rounded-xl bg-[#F8FAFC]" />
+        </div>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <div className="p-8 text-center">
+          <p className="text-sm font-semibold text-[#B42318]">Unable to load requests</p>
+          <p className="mt-1 text-sm text-[#667085]">{error}</p>
+          <Button size="sm" variant="outline" className="mt-4" onClick={onRetry}>Retry</Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Purchase workflow</p>
+          <h2 className="mt-1 font-heading text-xl font-semibold text-[#101828]">My Requests</h2>
+          <p className="mt-1 text-sm text-[#667085]">Track your requests and see what needs to happen next.</p>
+        </div>
+        <span className="rounded-full bg-[#F2F4F7] px-3 py-1.5 text-xs font-semibold text-[#475467]">{requests.length} request{requests.length === 1 ? "" : "s"}</span>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-[#EAECF0] p-3">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search requests, category, location or ID..."
+            className="w-full rounded-xl border border-[#D0D5DD] bg-[#FCFCFD] px-3.5 py-2.5 text-sm text-[#344054] outline-none placeholder:text-[#98A2B3] focus:border-[#3EA646]"
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              ["all", "All"],
+              ["waiting", "Waiting"],
+              ["quotation", "Quotation ready"],
+              ["deal", "Deal created"],
+              ["closed", "Closed"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${filter === key ? "bg-[#101828] text-white" : "bg-[#F2F4F7] text-[#475467] hover:bg-[#E4E7EC]"}`}
+              >
+                {label} <span className="ml-1 opacity-70">{counts[key]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {visible.length === 0 ? (
+          <div className="px-6 py-14 text-center">
+            <p className="text-sm font-semibold text-[#344054]">No requests found</p>
+            <p className="mt-1 text-sm text-[#667085]">Try another filter or search term.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#EAECF0]">
+            {visible.map(({ request, key, label, next, action, deal }) => {
+              const id = request._id;
+              const open = expandedId === id;
+              const category = request.listing?.category || "EPR Credit";
+              const quantity = request.requestedQuantity ?? 0;
+              const price = request.listing?.price;
+              const location = request.listing?.location || "—";
+              return (
+                <div key={id} className="px-4 py-3.5 sm:px-5">
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_250px_auto] lg:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold text-[#101828]">{category}</h3>
+                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses[key]}`}>{label}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-[#667085]">#{String(id).slice(-8)} · {Number(quantity).toLocaleString("en-IN")} MT · {location}</p>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#667085]">
+                        {price != null && <span>₹{Number(price).toLocaleString("en-IN")}/MT</span>}
+                        {request.listing?.complianceYear && <span>FY {request.listing.complianceYear}</span>}
+                        {request.createdAt && <span>{new Date(request.createdAt).toLocaleDateString("en-IN")}</span>}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-[#F8FAFC] px-3 py-2.5">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Next step</p>
+                      <p className="mt-0.5 text-xs font-semibold text-[#344054]">{next}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 lg:justify-end">
+                      <button type="button" onClick={() => setExpandedId(open ? null : id)} className="rounded-lg border border-[#D0D5DD] px-3 py-2 text-xs font-semibold text-[#475467] hover:bg-[#F9FAFB]">
+                        {open ? "Hide" : "Details"}
+                      </button>
+                      {action === "quotation" && (
+                        <Button size="sm" onClick={() => onOpenQuotation(request)}>Review quotation →</Button>
+                      )}
+                      {action === "deal" && deal && (
+                        <Button size="sm" onClick={() => onOpenDeals(deal)}>Open Deal Room →</Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {open && (
+                    <div className="mt-3 grid gap-3 rounded-xl border border-[#EAECF0] bg-[#FCFCFD] p-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Quantity</p><p className="mt-1 text-sm font-medium text-[#344054]">{Number(quantity).toLocaleString("en-IN")} MT</p></div>
+                      <div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Location</p><p className="mt-1 text-sm font-medium text-[#344054]">{location}</p></div>
+                      <div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Valid till</p><p className="mt-1 text-sm font-medium text-[#344054]">{request.listing?.validTill ? new Date(request.listing.validTill).toLocaleDateString("en-IN") : "—"}</p></div>
+                      <div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Status</p><p className="mt-1 text-sm font-medium text-[#344054]">{label}</p></div>
+                      {request.notes && <div className="sm:col-span-2 lg:col-span-4"><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Your notes</p><p className="mt-1 text-sm text-[#475467]">{request.notes}</p></div>}
+                      {request.rejectionReason && <div className="sm:col-span-2 lg:col-span-4 rounded-lg bg-[#FEF3F2] p-3"><p className="text-xs font-semibold text-[#B42318]">Rejection reason</p><p className="mt-1 text-sm text-[#B42318]">{request.rejectionReason}</p></div>}
+                      <div className="sm:col-span-2 lg:col-span-4">
+                        <MessageChat requestId={request._id} role="buyer" compact onRead={() => {}} />
+                      </div>
+                      <div className="sm:col-span-2 lg:col-span-4">
+                        <TransactionWorkflow request={request} deal={deal} role="buyer" onNext={(stage) => stage === "quotation" ? onOpenQuotation(request) : deal && onOpenDeals(deal)} />
+                      </div>
+                      <div className="sm:col-span-2 lg:col-span-4 text-right">
+                        <button type="button" onClick={() => onOpenMessages()} className="text-xs font-semibold text-[#344054] hover:underline">Open messages</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 const NAV = [
   {
     id: "dashboard",
@@ -427,7 +633,40 @@ function PostRequirementModal({ onClose, onCreated }) {
 }
 function BuyerDashboard({ onNavigate }) {
   const { user } = useAuth();
-  const [active, setActive] = useState("dashboard");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const validSections = useMemo(() => new Set(["dashboard", "requirements", "matching", "requests", "quotations", "deals", "watchlist", "disputes", "messages", "profile"]), []);
+  const validDealTabs = useMemo(() => new Set(["overview", "messages", "quotation", "payment", "dispute", "review"]), []);
+  const initialSection = validSections.has(searchParams.get("section")) ? searchParams.get("section") : "dashboard";
+  const [active, setActive] = useState(initialSection);
+
+  const openDealId = searchParams.get("deal");
+  const openDealTab = validDealTabs.has(searchParams.get("dealTab")) ? searchParams.get("dealTab") : "overview";
+
+  const openDealRoom = (deal, tab = "overview") => {
+    if (!deal?._id) return;
+    setActive("deals");
+    const next = new URLSearchParams(searchParams);
+    next.set("section", "deals");
+    next.set("deal", String(deal._id));
+    if (validDealTabs.has(tab) && tab !== "overview") next.set("dealTab", tab);
+    else next.delete("dealTab");
+    setSearchParams(next);
+  };
+
+  const closeDealRoom = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("deal");
+    next.delete("dealTab");
+    setSearchParams(next, { replace: true });
+  };
+
+  const updateDealRoomTab = (tab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("section", "deals");
+    if (validDealTabs.has(tab) && tab !== "overview") next.set("dealTab", tab);
+    else next.delete("dealTab");
+    setSearchParams(next, { replace: true });
+  };
   const [showPostModal, setShowPostModal] = useState(false);
 
   const [buyerRequirements, setBuyerRequirements] = useState([]);
@@ -599,11 +838,13 @@ function BuyerDashboard({ onNavigate }) {
       (requirement) => String(requirement._id) === String(requirementId),
     );
 
-  const fetchBuyerData = async () => {
+  const fetchBuyerData = async ({ silent = false } = {}) => {
     try {
-      setRequirementLoading(true);
-      setRequestLoading(true);
-      setDealLoading(true);
+      if (!silent) {
+        setRequirementLoading(true);
+        setRequestLoading(true);
+        setDealLoading(true);
+      }
 
       setRequirementError("");
       setRequestError("");
@@ -648,9 +889,37 @@ function BuyerDashboard({ onNavigate }) {
     fetchWatchlist();
     fetchMatchAlerts();
     fetchMessageUnread();
-    const interval = window.setInterval(fetchMessageUnread, 10000);
-    return () => window.clearInterval(interval);
+
+    const refresh = () => {
+      fetchBuyerData({ silent: true });
+      fetchWatchlist();
+      fetchMatchAlerts();
+      fetchMessageUnread();
+    };
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
+
+  useEffect(() => {
+    const current = searchParams.get("section");
+    if (active === "dashboard") {
+      if (current) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("section");
+        setSearchParams(next, { replace: true });
+      }
+      return;
+    }
+    if (current !== active) {
+      const next = new URLSearchParams(searchParams);
+      next.set("section", active);
+      setSearchParams(next, { replace: true });
+    }
+  }, [active, searchParams, setSearchParams]);
 
   const openReqs = useMemo(
     () =>
@@ -1044,7 +1313,7 @@ function BuyerDashboard({ onNavigate }) {
                           className="font-semibold text-[#0F1923]"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          Action Required
+                          Action Center
                         </h2>
                       </div>
                       <p className="text-xs text-[#9CA3AF] mt-1">
@@ -1737,451 +2006,184 @@ function BuyerDashboard({ onNavigate }) {
         )}
 
         {active === "requests" && (
-          <Card>
-            <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
-              <div>
-                <h2
-                  className="font-semibold text-[#0F1923]"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  My Requests
-                </h2>
-                <p className="text-xs text-[#9CA3AF] mt-1">
-                  Track purchase requests managed by EPR Nexus.
-                </p>
-              </div>
-              <Badge label={`${buyerRequests.length} Requests`} />
-            </div>
-
-            {requestLoading ? (
-              <div className="py-16 text-center text-[#9CA3AF]">
-                Loading your requests...
-              </div>
-            ) : requestError ? (
-              <div className="py-16 text-center text-[#EF4444]">
-                {requestError}
-              </div>
-            ) : buyerRequests.length === 0 ? (
-              <div className="py-16 text-center text-[#9CA3AF]">
-                <p className="text-lg font-semibold text-[#374151]">
-                  No requests yet
-                </p>
-                <p className="text-sm mt-1">
-                  Your purchase requests will appear here.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-[#E5EAF0]">
-                {buyerRequests.map((request) => (
-                  <div key={request._id} className="p-5">
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-4">
-                          <h3
-                            className="font-semibold text-[#0F1923]"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {request.listing?.category || "EPR Credit"}
-                          </h3>
-                          <Badge label={request.status} />
-                        </div>
-
-                        <div className="mb-4">
-                          <MessageChat
-                            requestId={request._id}
-                            role="buyer"
-                            compact
-                            onRead={markRequestMessagesRead}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                          <div>
-                            <p className="text-xs text-[#9CA3AF]">
-                              Requested Quantity
-                            </p>
-                            <p className="font-medium text-[#374151]">
-                              {request.requestedQuantity ?? 0} MT
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[#9CA3AF]">
-                              Listing Price
-                            </p>
-                            <p className="font-medium text-[#374151]">
-                              ₹{request.listing?.price ?? "—"} / MT
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[#9CA3AF]">
-                              Compliance Year
-                            </p>
-                            <p className="font-medium text-[#374151]">
-                              FY {request.listing?.complianceYear || "—"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[#9CA3AF]">Location</p>
-                            <p className="font-medium text-[#374151]">
-                              {request.listing?.location || "—"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[#9CA3AF]">Submitted</p>
-                            <p className="font-medium text-[#374151]">
-                              {request.createdAt
-                                ? new Date(
-                                    request.createdAt,
-                                  ).toLocaleDateString("en-IN")
-                                : "—"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[#9CA3AF]">Valid Till</p>
-                            <p className="font-medium text-[#374151]">
-                              {request.listing?.validTill
-                                ? new Date(
-                                    request.listing.validTill,
-                                  ).toLocaleDateString("en-IN")
-                                : "—"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {request.notes && (
-                          <div className="mt-4 p-3 bg-[#F7F9FB] rounded-lg">
-                            <p className="text-xs text-[#9CA3AF] mb-1">
-                              Your Notes
-                            </p>
-                            <p className="text-sm text-[#374151]">
-                              {request.notes}
-                            </p>
-                          </div>
-                        )}
-
-                        {request.rejectionReason && (
-                          <div className="mt-3 p-3 bg-[#FEF2F2] rounded-lg">
-                            <p className="text-xs font-semibold text-[#991B1B]">
-                              Rejection Reason
-                            </p>
-                            <p className="text-sm text-[#B91C1C] mt-1">
-                              {request.rejectionReason}
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="mt-4 p-3 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg">
-                          <p className="text-xs text-[#1D4ED8]">
-                            EPR Nexus manages all buyer-seller communication.
-                            Seller contact details remain confidential.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+          <CompactBuyerRequests
+            requests={buyerRequests}
+            deals={buyerDeals}
+            loading={requestLoading}
+            error={requestError}
+            onRetry={fetchBuyerData}
+            onOpenQuotation={() => setActive("quotations")}
+            onOpenDeals={() => setActive("deals")}
+            onOpenMessages={() => setActive("messages")}
+          />
         )}
 
         {active === "quotations" && (
-          <Card>
-            <div className="px-5 py-4 border-b border-[#E5EAF0]">
-              <h2 className="font-semibold text-[#0F1923]">Quotations</h2>
-              <p className="text-xs text-[#9CA3AF] mt-1">
-                Review commercial offers issued by EPR Nexus. Accepting a
-                quotation creates a deal with payment still pending.
-              </p>
-            </div>
-            <div className="divide-y divide-[#E5EAF0]">
-              {buyerRequests.filter(
-                (request) => request.offer?.finalAmount != null,
-              ).length === 0 ? (
-                <div className="py-16 text-center text-sm text-[#9CA3AF]">
-                  No quotations yet.
-                </div>
-              ) : (
-                buyerRequests
-                  .filter((request) => request.offer?.finalAmount != null)
-                  .map((request) => (
-                    <div
-                      key={request._id}
-                      className="p-5 grid lg:grid-cols-[1fr_380px] gap-5 items-start"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-[#0F1923]">
-                            {request.listing?.category || "EPR Credit"}
-                          </h3>
-                          <Badge
-                            label={
-                              request.offer?.acceptedAt
-                                ? "Accepted"
-                                : "Action required"
-                            }
-                          />
-                        </div>
-                        <p className="text-sm text-[#6B7280]">
-                          {request.requestedQuantity || 0} MT · Request #
-                          {request._id.slice(-6)}
-                        </p>
-                        <p className="text-xs text-[#9CA3AF] mt-2">
-                          Quotation #{request.offer.version} · Issued{" "}
-                          {request.offer.sentAt
-                            ? new Date(request.offer.sentAt).toLocaleString(
-                                "en-IN",
-                              )
-                            : "—"}
-                        </p>
-                        {!request.offer?.acceptedAt ? (
-                          <p className="text-xs text-[#52606D] mt-3">
-                            Need a change? Open Messages and ask EPR Nexus. The
-                            quotation itself can only be changed by EPR Nexus.
-                          </p>
-                        ) : (
-                          <p className="text-xs text-[#2E7D32] mt-3">
-                            Accepted does not mean payment received. Track
-                            payment in My Deals.
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <QuotationCard
-                          request={request}
-                          onAccept={async () => {
-                            try {
-                              const response = await api.post(
-                                `/requests/${request._id}/offer/accept`,
-                              );
-                              if (response.data.success) await fetchBuyerData();
-                            } catch (error) {
-                              alert(
-                                error.response?.data?.message ||
-                                  "Unable to accept this quotation.",
-                              );
-                            }
-                          }}
-                          accepting={false}
-                        />
-                        <div className="mt-2">
-                          <MessageChat
-                            requestId={request._id}
-                            role="buyer"
-                            compact
-                            onRead={markRequestMessagesRead}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
-          </Card>
-        )}
-
-        {active === "deals" && (
-          <Card>
-            <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2
-                  className="font-semibold text-[#0F1923]"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  My Deals
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">
+                  Commercial offers
+                </p>
+                <h2 className="mt-1 font-heading text-xl font-semibold text-[#101828]">
+                  Quotations
                 </h2>
-                <p className="text-xs text-[#9CA3AF] mt-1">
-                  Track transactions managed by EPR Nexus.
+                <p className="mt-1 text-sm text-[#667085]">
+                  Review offers from EPR Nexus and continue directly to your deal.
                 </p>
               </div>
-              <Badge label={`${buyerDeals.length} Deals`} />
+              <span className="rounded-full bg-[#F2F4F7] px-3 py-1.5 text-xs font-semibold text-[#475467]">
+                {buyerRequests.filter((r) => r.offer?.finalAmount != null && !["completed", "cancelled", "rejected"].includes(r.status)).length} quotation{buyerRequests.filter((r) => r.offer?.finalAmount != null && !["completed", "cancelled", "rejected"].includes(r.status)).length === 1 ? "" : "s"}
+              </span>
             </div>
 
-            {dealLoading ? (
-              <div className="py-16 text-center text-[#9CA3AF]">
-                Loading your deals...
-              </div>
-            ) : dealError ? (
-              <div className="py-16 text-center text-[#EF4444]">
-                {dealError}
-              </div>
-            ) : buyerDeals.length === 0 ? (
-              <div className="py-16 text-center text-[#9CA3AF]">
-                <p className="text-lg font-semibold text-[#374151]">
-                  No deals yet
-                </p>
-                <p className="text-sm mt-1">
-                  Completed and in-progress transactions will appear here.
-                </p>
-              </div>
+            {requestLoading ? (
+              <Card>
+                <div className="space-y-3 p-5">
+                  <div className="h-5 w-40 animate-pulse rounded bg-[#F2F4F7]" />
+                  <div className="h-24 animate-pulse rounded-xl bg-[#F8FAFC]" />
+                </div>
+              </Card>
+            ) : requestError ? (
+              <Card>
+                <div className="p-8 text-center">
+                  <p className="text-sm font-semibold text-[#B42318]">Unable to load quotations</p>
+                  <p className="mt-1 text-sm text-[#667085]">{requestError}</p>
+                  <Button size="sm" variant="outline" className="mt-4" onClick={fetchBuyerData}>
+                    Retry
+                  </Button>
+                </div>
+              </Card>
+            ) : buyerRequests.filter((r) => r.offer?.finalAmount != null && !["completed", "cancelled", "rejected"].includes(r.status)).length === 0 ? (
+              <Card>
+                <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0FBF1] text-[#3EA646]">
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h8M8 10h8M8 14h5m-8 7h10a3 3 0 003-3V6a3 3 0 00-3-3H8a3 3 0 00-3 3v12a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                  <p className="mt-4 font-heading text-sm font-semibold text-[#344054]">No quotations yet</p>
+                  <p className="mt-1 max-w-md text-sm text-[#667085]">
+                    Once EPR Nexus issues a commercial quotation for one of your requests, it will appear here.
+                  </p>
+                  <Button size="sm" variant="outline" className="mt-4" onClick={() => setActive("requests")}>
+                    View my requests
+                  </Button>
+                </div>
+              </Card>
             ) : (
-              <div className="divide-y divide-[#E5EAF0]">
-                {buyerDeals.map((deal) => {
-                  const stages = [
-                    { key: "matched", label: "Matched" },
-                    { key: "terms_agreed", label: "Quotation Accepted" },
-                    {
-                      key: "payment_coordination",
-                      label: "Payment Coordination",
-                    },
-                    { key: "completed", label: "Completed" },
-                  ];
-                  const order = stages.map((stage) => stage.key);
-                  const currentIndex = order.indexOf(deal.status);
-                  const totalValue =
-                    Number(deal.quantity || 0) * Number(deal.agreedPrice || 0);
+              <div className="space-y-3">
+                {buyerRequests
+                  .filter((request) => request.offer?.finalAmount != null && !["completed", "cancelled", "rejected"].includes(request.status))
+                  .map((request) => {
+                    const offer = request.offer;
+                    const requestCompleted = ["completed", "cancelled", "rejected"].includes(request.status);
+                    const accepted = Boolean(offer.acceptedAt) || request.status === "offer_accepted" || request.status === "approved";
+                    const expired = offer.expiresAt && new Date(offer.expiresAt).getTime() < Date.now();
+                    const linkedDeal = buyerDeals.find((deal) => String(deal.requestId || "") === String(request._id));
+                    const quotationActionable = !requestCompleted && !accepted && !expired && !linkedDeal;
 
-                  return (
-                    <div key={deal._id} className="p-5">
-                      <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-4">
-                            <h3
-                              className="font-semibold text-[#0F1923]"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              {deal.listing?.category || "EPR Credit Deal"}
-                            </h3>
-                            <Badge label={deal.status.replaceAll("_", " ")} />
-                          </div>
+                    return (
+                      <Card key={request._id} className="overflow-hidden">
+                        <div className="p-4 sm:p-5">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-heading text-base font-semibold text-[#101828]">
+                                  {request.listing?.category || request.type || "EPR Credit"}
+                                </h3>
+                                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${requestCompleted ? "bg-[#F2F4F7] text-[#667085]" : accepted ? "bg-[#EBF8EC] text-[#26702B]" : expired ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#FFF7E8] text-[#B54708]"}`}>
+                                  {requestCompleted ? "Completed" : accepted ? "Accepted" : expired ? "Expired" : "Action required"}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-[#667085]">
+                                Request #{String(request._id).slice(-8)} · {Number(request.requestedQuantity || 0).toLocaleString("en-IN")} MT · {request.listing?.location || request.location || "Location not specified"}
+                              </p>
+                              <p className="mt-2 text-[11px] text-[#98A2B3]">
+                                Quotation #{offer.version || 1} · Issued {offer.sentAt ? new Date(offer.sentAt).toLocaleDateString("en-IN") : "—"}
+                              </p>
+                            </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">Quantity</p>
-                              <p className="font-medium text-[#374151]">
-                                {deal.quantity} MT
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Agreed Price
-                              </p>
-                              <p className="font-medium text-[#374151]">
-                                ₹{deal.agreedPrice} / MT
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Credit Value
-                              </p>
-                              <p className="font-semibold text-[#5AC361]">
-                                ₹
-                                {Number(
-                                  deal.creditSubtotal ?? totalValue,
-                                ).toLocaleString("en-IN")}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                EPR Nexus Fee
-                              </p>
-                              <p className="font-medium text-[#374151]">
-                                ₹
-                                {Number(
-                                  deal.serviceFee ?? deal.commissionAmount ?? 0,
-                                ).toLocaleString("en-IN")}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Total Payable
-                              </p>
-                              <p className="font-semibold text-[#0F1923]">
-                                ₹
-                                {Number(
-                                  deal.finalAmount ??
-                                    totalValue +
-                                      Number(
-                                        deal.serviceFee ??
-                                          deal.commissionAmount ??
-                                          0,
-                                      ),
-                                ).toLocaleString("en-IN")}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">Payment</p>
-                              <p className="font-medium text-[#374151] capitalize">
-                                {deal.paymentStatus || "pending"}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">Location</p>
-                              <p className="font-medium text-[#374151]">
-                                {deal.listing?.location || "—"}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Compliance Year
-                              </p>
-                              <p className="font-medium text-[#374151]">
-                                FY {deal.listing?.complianceYear || "—"}
-                              </p>
+                            <div className="grid grid-cols-2 gap-2 sm:min-w-[360px]">
+                              <div className="rounded-xl bg-[#F8FAFC] p-3">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#98A2B3]">Credit value</p>
+                                <p className="mt-1 text-sm font-semibold text-[#344054]">₹{Number(offer.creditSubtotal || 0).toLocaleString("en-IN")}</p>
+                              </div>
+                              <div className="rounded-xl bg-[#F8FAFC] p-3">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#98A2B3]">Service fee</p>
+                                <p className="mt-1 text-sm font-semibold text-[#344054]">₹{Number(offer.serviceFee || 0).toLocaleString("en-IN")}</p>
+                              </div>
+                              <div className="col-span-2 rounded-xl border border-[#DDEADF] bg-[#F0FBF1] p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-xs font-semibold text-[#26702B]">Buyer pays</p>
+                                  <p className="text-lg font-bold text-[#26702B]">₹{Number(offer.finalAmount).toLocaleString("en-IN")}</p>
+                                </div>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="mt-4 p-4 bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl">
-                            <p className="text-xs font-semibold text-[#6B7280] mb-3 uppercase tracking-wide">
-                              Deal Progress
-                            </p>
-                            <div className="flex items-center gap-1 overflow-x-auto">
-                              {stages.map((stage, index) => {
-                                const done = currentIndex >= index;
-                                return (
-                                  <div
-                                    key={stage.key}
-                                    className="flex items-center gap-1 shrink-0"
-                                  >
-                                    <div
-                                      className={`px-2 py-1 rounded text-[10px] font-medium whitespace-nowrap ${
-                                        done
-                                          ? "bg-[#5AC361] text-white"
-                                          : "bg-[#F0F4F8] text-[#9CA3AF]"
-                                      }`}
-                                    >
-                                      {stage.label}
-                                    </div>
-                                    {index < stages.length - 1 && (
-                                      <div
-                                        className={`w-3 h-0.5 ${done ? "bg-[#5AC361]" : "bg-[#E5EAF0]"}`}
-                                      />
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          <div className="mt-4 p-3 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg">
-                            <p className="text-xs text-[#1D4ED8]">
-                              EPR Nexus manages the transaction, payment
-                              coordination, and seller communication.
-                            </p>
-                          </div>
-
-                          {deal.notes && (
-                            <div className="mt-3">
-                              <p className="text-xs text-[#9CA3AF]">
-                                Deal Notes
-                              </p>
-                              <p className="text-sm text-[#374151] mt-1">
-                                {deal.notes}
-                              </p>
+                          {offer.note && (
+                            <div className="mt-4 rounded-xl border border-[#E5EAF0] bg-white p-3 text-xs text-[#667085]">
+                              {offer.note}
                             </div>
                           )}
 
-                          <div className="mt-4 flex justify-end">
-                            <DealRoom deal={deal} role="buyer" />
+                          <div className="mt-4 flex flex-col gap-3 border-t border-[#E5EAF0] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-xs font-semibold text-[#344054]">
+                                {requestCompleted ? "Transaction completed" : accepted ? "Quotation accepted" : expired ? "Quotation expired" : "Next step: review and accept"}
+                              </p>
+                              <p className="mt-0.5 text-xs text-[#667085]">
+                                {requestCompleted ? "This request is closed. The quotation is no longer actionable." : accepted ? "Continue in your Deal Room to complete the transaction." : expired ? "Contact EPR Nexus if you need a revised quotation." : "Commercial terms are locked once you accept."}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {quotationActionable && (
+                                <Button
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      await api.post(`/requests/${request._id}/offer/accept`);
+                                      await fetchBuyerData();
+                                    } catch (error) {
+                                      alert(error.response?.data?.message || "Unable to accept this quotation.");
+                                    }
+                                  }}
+                                >
+                                  Accept quotation →
+                                </Button>
+                              )}
+                              {accepted && linkedDeal && (
+                                <Button size="sm" onClick={() => setActive("deals")}>
+                                  Open Deal Room →
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" onClick={() => setActive("messages")}>
+                                Open messages
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      </Card>
+                    );
+                  })}
               </div>
             )}
-          </Card>
+          </div>
+        )}
+
+        {active === "deals" && (
+          <DealsSection
+            deals={buyerDeals}
+            role="buyer"
+            loading={dealLoading}
+            error={dealError}
+            openDealId={openDealId}
+            openDealTab={openDealTab}
+            onOpenDealRoom={openDealRoom}
+            onCloseDealRoom={closeDealRoom}
+            onDealRoomTabChange={updateDealRoomTab}
+          />
         )}
 
         {active === "watchlist" && (

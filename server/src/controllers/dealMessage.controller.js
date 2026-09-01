@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import Deal from "../models/Deal.js";
+import PurchaseRequest from "../models/PurchaseRequest.js";
 import NegotiationMessage from "../models/NegotiationMessage.js";
 import User from "../models/User.js";
 
@@ -282,43 +283,44 @@ export const getUnreadMessageCount = async (
   res,
 ) => {
   try {
-    const unreadCount =
-      await NegotiationMessage.countDocuments({
-        visibleToRoles: req.user.role,
+    // Scope unread messages to requests the current user actually belongs to.
+    // visibleToRoles alone is not an ownership check: a buyer/seller role can
+    // be present on many messages belonging to other transactions.
+    let requestIds = null;
 
-        readBy: {
-          $ne: req.user._id,
+    if (req.user.role === "buyer") {
+      requestIds = await PurchaseRequest.find({ buyerId: req.user._id })
+        .select("_id")
+        .lean()
+        .then((items) => items.map((item) => item._id));
+    } else if (req.user.role === "seller") {
+      requestIds = await PurchaseRequest.find({ sellerId: req.user._id })
+        .select("_id")
+        .lean()
+        .then((items) => items.map((item) => item._id));
+    }
+
+    const baseMatch = {
+      visibleToRoles: req.user.role,
+      senderId: { $ne: req.user._id },
+      readBy: { $ne: req.user._id },
+    };
+
+    if (requestIds) {
+      baseMatch.requestId = { $in: requestIds };
+    }
+
+    const unreadCount = await NegotiationMessage.countDocuments(baseMatch);
+
+    const unreadByRequest = await NegotiationMessage.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: "$requestId",
+          count: { $sum: 1 },
         },
-      });
-
-    /*
-     * Also return byRequest because some existing
-     * dashboard code may use it to display unread
-     * counts per conversation/request.
-     */
-
-    const unreadByRequest =
-      await NegotiationMessage.aggregate([
-        {
-          $match: {
-            visibleToRoles: req.user.role,
-
-            readBy: {
-              $ne: req.user._id,
-            },
-          },
-        },
-
-        {
-          $group: {
-            _id: "$requestId",
-
-            count: {
-              $sum: 1,
-            },
-          },
-        },
-      ]);
+      },
+    ]);
 
     const byRequest = {};
 
@@ -421,6 +423,20 @@ export const getDealMessages = async (
           createdAt: 1,
         })
         .lean();
+
+    // Opening the thread means the user has viewed it. Mark only incoming
+    // messages as read; the user's own messages must never create an unread badge.
+    await NegotiationMessage.updateMany(
+      {
+        requestId: deal.requestId,
+        visibleToRoles: req.user.role,
+        senderId: { $ne: req.user._id },
+        readBy: { $ne: req.user._id },
+      },
+      {
+        $addToSet: { readBy: req.user._id },
+      },
+    );
 
     return res.status(200).json({
       success: true,
@@ -877,26 +893,42 @@ export const markDealMessageRead = async (
       });
     }
 
-    const updated =
-      await NegotiationMessage.findOneAndUpdate(
-        {
-          _id: messageId,
+    const message = await NegotiationMessage.findOne({
+      _id: messageId,
+      visibleToRoles: req.user.role,
+    })
+      .select("requestId")
+      .lean();
 
-          visibleToRoles:
-            req.user.role,
-        },
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found or access denied",
+      });
+    }
 
-        {
-          $addToSet: {
-            readBy:
-              req.user._id,
-          },
-        },
+    const dealFilter = { requestId: message.requestId };
+    if (req.user.role === "buyer") dealFilter.buyerId = req.user._id;
+    if (req.user.role === "seller") dealFilter.sellerId = req.user._id;
 
-        {
-          new: true,
-        },
-      );
+    const hasAccess = await Deal.exists(dealFilter);
+    if (!hasAccess && req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have access to this deal message",
+      });
+    }
+
+    const updated = await NegotiationMessage.findOneAndUpdate(
+      {
+        _id: messageId,
+        visibleToRoles: req.user.role,
+      },
+      {
+        $addToSet: { readBy: req.user._id },
+      },
+      { new: true },
+    );
 
     if (!updated) {
       return res.status(404).json({
@@ -939,24 +971,30 @@ export const markAllDealMessagesRead = async (
   res,
 ) => {
   try {
-    const result =
-      await NegotiationMessage.updateMany(
-        {
-          visibleToRoles:
-            req.user.role,
+    const dealFilter = {};
+    if (req.user.role === "buyer") dealFilter.buyerId = req.user._id;
+    if (req.user.role === "seller") dealFilter.sellerId = req.user._id;
 
-          readBy: {
-            $ne: req.user._id,
-          },
-        },
+    const deals = await Deal.find(dealFilter).select("requestId").lean();
+    const requestIds = deals.map((deal) => deal.requestId).filter(Boolean);
 
-        {
-          $addToSet: {
-            readBy:
-              req.user._id,
-          },
-        },
-      );
+    if (!requestIds.length && req.user.role !== "admin") {
+      return res.status(200).json({ success: true, modifiedCount: 0 });
+    }
+
+    const messageFilter = {
+      visibleToRoles: req.user.role,
+      readBy: { $ne: req.user._id },
+    };
+
+    if (req.user.role !== "admin") {
+      messageFilter.requestId = { $in: requestIds };
+    }
+
+    const result = await NegotiationMessage.updateMany(
+      messageFilter,
+      { $addToSet: { readBy: req.user._id } },
+    );
 
     return res.status(200).json({
       success: true,

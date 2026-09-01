@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Button, Input } from "../components/ui";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -84,6 +85,7 @@ function GoogleButton({ onCredential, disabled }) {
 }
 
 function AuthPage({ onNavigate, initialMode = "login" }) {
+  const navigate = useNavigate();
   const { login, register, googleLogin, startSignupSession } = useAuth();
 
   const [mode, setMode] = useState(initialMode);
@@ -246,6 +248,10 @@ function AuthPage({ onNavigate, initialMode = "login" }) {
       email: "",
       password: "",
     });
+
+    // Keep the URL in sync with the selected auth mode.
+    // This fixes Login → Sign Up while preserving the existing form behavior.
+    navigate(nextMode === "signup" ? "/signup" : "/login");
   };
 
   return (

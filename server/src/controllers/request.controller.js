@@ -8,6 +8,8 @@ import {
   notifyDealStatusChange,
 } from "../services/notification.service.js";
 import { createActivityLog } from "../services/activityLog.service.js";
+import { sendTransactionEmail } from "../services/email.service.js";
+import { CLIENT_URL } from "../config/env.js";
 
 const roundMoney = (value) => Math.round(Number(value) * 100) / 100;
 
@@ -243,6 +245,17 @@ export const issuePurchaseRequestOffer = async (req, res) => {
       });
     }
 
+    const existingDeal = await Deal.findOne({ requestId: request._id }).select("_id status quotationVersion").lean();
+
+    if (existingDeal) {
+      return res.status(409).json({
+        success: false,
+        message: "This request already has a deal. A new quotation cannot be issued.",
+        code: "DEAL_ALREADY_EXISTS",
+        dealId: existingDeal._id,
+      });
+    }
+
     if (["completed", "cancelled", "rejected"].includes(request.status)) {
       return res.status(409).json({
         success: false,
@@ -382,6 +395,31 @@ export const issuePurchaseRequestOffer = async (req, res) => {
       },
     });
 
+    // Email is best-effort and must never make a successfully issued quotation fail.
+    try {
+      await sendTransactionEmail({
+        to: request.email,
+        subject:
+          offer.version === 1
+            ? "Your EPR Nexus quotation is ready"
+            : `Your EPR Nexus quotation #${offer.version} has been revised`,
+        title:
+          offer.version === 1
+            ? "Your quotation is ready"
+            : `Quotation #${offer.version} is ready`,
+        message:
+          `EPR Nexus has issued quotation #${offer.version} for ${request.quantity} MT. ` +
+          `Total payable amount: ₹${offer.finalAmount.toLocaleString("en-IN")}.`,
+        actionText: "Review quotation",
+        actionUrl: `${CLIENT_URL}/buyer?section=quotations`,
+      });
+    } catch (emailError) {
+      console.error(
+        "Quotation email delivery failed:",
+        emailError?.message || emailError,
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message:
@@ -429,6 +467,17 @@ export const acceptPurchaseRequestOffer = async (req, res) => {
       });
     }
 
+    const existingDeal = await Deal.findOne({ requestId: request._id }).select("_id status quotationVersion").lean();
+
+    if (existingDeal) {
+      return res.status(409).json({
+        success: false,
+        message: "A deal already exists for this request. This quotation is no longer actionable.",
+        deal: existingDeal,
+        code: "DEAL_ALREADY_EXISTS",
+      });
+    }
+
     if (["completed", "cancelled", "rejected"].includes(request.status)) {
       return res.status(409).json({
         success: false,
@@ -466,17 +515,6 @@ export const acceptPurchaseRequestOffer = async (req, res) => {
         message:
           "This quotation has expired. Please wait for a revised quotation.",
         code: "QUOTATION_EXPIRED",
-      });
-    }
-
-    const existingDeal = await Deal.findOne({ requestId: request._id });
-
-    if (existingDeal) {
-      return res.status(409).json({
-        success: false,
-        message: "A deal already exists for this purchase request",
-        deal: existingDeal,
-        code: "DEAL_ALREADY_EXISTS",
       });
     }
 

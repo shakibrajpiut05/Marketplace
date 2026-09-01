@@ -1,5 +1,8 @@
 import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 
+import mongoose from "mongoose";
 import Document from "../models/Document.js";
 import User from "../models/User.js";
 import { createActivityLog } from "../services/activityLog.service.js";
@@ -269,6 +272,79 @@ export const reviewKycDocument = async (
       success: false,
       message:
         "Failed to review KYC document",
+    });
+  }
+};
+
+
+/*
+|--------------------------------------------------------------------------
+| Secure document download
+|--------------------------------------------------------------------------
+|
+| Documents are private. Only the document owner or an admin can download
+| a document through this endpoint. Dispute evidence has its own route so
+| both participants can access evidence attached to their shared dispute.
+|
+*/
+
+export const downloadDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(documentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document ID",
+      });
+    }
+
+    const document = await Document.findById(documentId);
+
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      });
+    }
+
+    const isOwner = String(document.owner) === String(req.user._id);
+    const isAdmin = req.user.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to access this document",
+      });
+    }
+
+    const uploadsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../uploads/documents");
+    const requestedPath = path.resolve(uploadsRoot, path.basename(document.fileUrl || ""));
+
+    if (!requestedPath.startsWith(`${uploadsRoot}${path.sep}`)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document path",
+      });
+    }
+
+    if (!fs.existsSync(requestedPath)) {
+      return res.status(404).json({
+        success: false,
+        message: "Document file is no longer available",
+      });
+    }
+
+    res.setHeader("Content-Type", document.mimeType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${String(document.fileName || "document").replace(/[\"\r\n]/g, "_")}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+
+    return res.sendFile(requestedPath);
+  } catch (error) {
+    console.error("Secure document download error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to download document",
     });
   }
 };

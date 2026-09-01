@@ -113,3 +113,58 @@ export const sendPasswordResetEmail = async ({
 
   return { sent: true, resetUrl };
 };
+
+
+/**
+ * Send an important transaction lifecycle email.
+ *
+ * This helper intentionally does not throw into the caller's business transaction:
+ * email delivery is best-effort and should never roll back a successful DB operation.
+ */
+export async function sendTransactionEmail({
+  to,
+  subject,
+  title,
+  message,
+  actionText = null,
+  actionUrl = null,
+}) {
+  if (!to) return { sent: false, skipped: true, reason: "missing-recipient" };
+
+  const safe = (value = "") =>
+    String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const html = `
+    <div style="margin:0;padding:32px 16px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a">
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+        <div style="padding:22px 24px;border-bottom:1px solid #e2e8f0">
+          <div style="font-size:18px;font-weight:700">EPR Nexus</div>
+        </div>
+        <div style="padding:28px 24px">
+          <h1 style="margin:0 0 12px;font-size:22px">${safe(title)}</h1>
+          <p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#475569">${safe(message)}</p>
+          ${actionUrl ? `<p style="margin:0 0 22px"><a href="${safe(actionUrl)}" style="display:inline-block;padding:11px 16px;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600">${safe(actionText || "Open EPR Nexus")}</a></p>` : ""}
+          <p style="margin:26px 0 0;font-size:12px;line-height:1.6;color:#94a3b8">You are receiving this email because of activity on your EPR Nexus account.</p>
+        </div>
+      </div>
+    </div>`;
+
+  try {
+    const info = await transporter.sendMail({
+      to,
+      subject,
+      html,
+      text: `${title}\n\n${message}${actionUrl ? `\n\n${actionText || "Open EPR Nexus"}: ${actionUrl}` : ""}`,
+    });
+    return { sent: true, messageId: info?.messageId || null };
+  } catch (error) {
+    console.error("Transaction email delivery failed:", error?.message || error);
+    return { sent: false, skipped: false, error: error?.message || "email-delivery-failed" };
+  }
+}
+

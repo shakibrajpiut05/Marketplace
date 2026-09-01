@@ -2,10 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import path from "path";
-import { fileURLToPath } from "url";
-
-import { PORT, CLIENT_URL } from "./config/env.js";
+import { validateProductionConfig, PORT, CLIENT_URL, TRUST_PROXY } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import documentRoutes from "./routes/document.routes.js";
 import verificationRoutes from "./routes/verification.routes.js";
@@ -26,11 +23,17 @@ import watchlistRoutes from "./routes/watchlist.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import invoiceRoutes from "./routes/invoice.routes.js";
 import disputeRoutes from "./routes/dispute.routes.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import reviewRoutes from "./routes/review.routes.js";
+import { apiRateLimiter } from "./middleware/rateLimit.middleware.js";
+import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
 
 const app = express();
+
+validateProductionConfig();
+
+if (TRUST_PROXY) {
+  app.set("trust proxy", 1);
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -69,8 +72,8 @@ app.use(helmet());
 |--------------------------------------------------------------------------
 */
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 /*
 |--------------------------------------------------------------------------
@@ -85,7 +88,8 @@ app.use(morgan("dev"));
 | Routes
 |--------------------------------------------------------------------------
 */
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use("/api", apiRateLimiter);
+
 app.use("/api/requests", requestRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -104,12 +108,22 @@ app.use("/api/watchlist", watchlistRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/disputes", disputeRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 /*
 |--------------------------------------------------------------------------
 | Health Check
 |--------------------------------------------------------------------------
 */
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: "ok",
+    database: "connected",
+    environment: process.env.NODE_ENV || "development",
+  });
+});
 
 app.get("/", (req, res) => {
   res.status(200).json({
@@ -124,12 +138,9 @@ app.get("/", (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Route ${req.method} ${req.originalUrl} not found`,
-  });
-});
+app.use(notFoundHandler);
+
+app.use(errorHandler);
 
 /*
 |--------------------------------------------------------------------------
@@ -137,6 +148,22 @@ app.use((req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+const shutdown = async (signal) => {
+  console.log(`${signal} received. Shutting down gracefully...`);
+
+  server.close(async () => {
+    try {
+      const mongoose = await import("mongoose");
+      await mongoose.default.connection.close(false);
+    } finally {
+      process.exit(0);
+    }
+  });
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

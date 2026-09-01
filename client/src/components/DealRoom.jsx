@@ -4,6 +4,50 @@ import { Badge, Button, Card, Textarea } from "./ui";
 import { QuotationCard } from "./QuotationCenter.jsx";
 import { DisputePanel } from "./DisputeCenter.jsx";
 
+
+function DealRoomWorkflowHeader({ activeTab, status }) {
+  const tabs = [
+    ["overview", "1", "Overview"],
+    ["messages", "2", "Messages"],
+    ["quotation", "3", "Quotation"],
+    ["payment", "4", "Payment"],
+  ];
+  const paymentish = ["payment", "payment_pending", "payment_submitted", "payment_confirmed"].includes(String(status || "").toLowerCase());
+  const completed = String(status || "").toLowerCase() === "completed";
+
+  return (
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <DealRoomWorkflowHeader activeTab={activeTab} status={deal?.status} />
+
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Deal journey</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">
+            {completed ? "Deal completed" : paymentish ? "Payment stage" : "Continue your transaction"}
+          </div>
+        </div>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+          {tabs.findIndex(([key]) => key === activeTab) + 1}/4
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {tabs.map(([key, number, label], i) => {
+          const current = key === activeTab;
+          const passed = i < tabs.findIndex(([k]) => k === activeTab);
+          return (
+            <div key={key} className="min-w-0">
+              <div className={`h-1 rounded-full ${current ? "bg-slate-900" : passed ? "bg-slate-300" : "bg-slate-100"}`} />
+              <div className={`mt-2 truncate text-[11px] font-semibold ${current ? "text-slate-900" : "text-slate-400"}`}>
+                <span className="mr-1">{passed ? "✓" : number}</span>{label}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const money = (value) =>
   `₹${Number(value || 0).toLocaleString("en-IN", {
     maximumFractionDigits: 2,
@@ -519,9 +563,144 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
   );
 }
 
-export function DealRoom({ deal, role = "buyer" }) {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState("overview");
+
+function ReviewPanel({ deal, role }) {
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const loadReviews = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const response = await api.get(`/reviews/deal/${deal._id}`);
+      const items = response.data?.reviews || [];
+      setReviews(items);
+      const mine = items.find((item) => item.reviewerId?.role === role);
+      if (mine) setSaved(true);
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to load reviews.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (deal?.status === "completed") loadReviews();
+  }, [deal?._id, deal?.status]);
+
+  const submit = async () => {
+    if (!rating || saving || saved) return;
+    try {
+      setSaving(true);
+      setError("");
+      await api.post("/reviews", { dealId: deal._id, rating, comment: comment.trim() });
+      setSaved(true);
+      await loadReviews();
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to submit review.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (deal.status !== "completed") {
+    return (
+      <Card>
+        <p className="text-sm font-semibold text-[#344054]">Reviews unlock after completion</p>
+        <p className="mt-1 text-sm text-[#667085]">Once this deal is completed, both participants can rate their counterpart.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Your review</p>
+        {saved ? (
+          <div className="mt-3 rounded-xl border border-[#CFE8D1] bg-[#F5FBF6] p-4">
+            <p className="text-sm font-semibold text-[#1F6B2A]">Review submitted</p>
+            <p className="mt-1 text-sm text-[#52705A]">Thank you. Your rating is now part of the participant's trust history.</p>
+          </div>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-[#667085]">Rate your {role === "buyer" ? "seller" : "buyer"} after the completed transaction.</p>
+            <div className="mt-4 flex gap-1" aria-label="Choose rating">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button key={value} type="button" onClick={() => setRating(value)} className={`text-2xl leading-none ${value <= rating ? "text-[#E6A700]" : "text-[#D0D5DD]"}`} aria-label={`${value} star${value > 1 ? "s" : ""}`}>★</button>
+              ))}
+            </div>
+            <Textarea className="mt-4" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Optional feedback about the transaction…" maxLength={1000} />
+            {error ? <p className="mt-2 text-xs text-[#B42318]">{error}</p> : null}
+            <Button className="mt-3" disabled={!rating || saving} onClick={submit}>
+              {saving ? "Submitting…" : "Submit review"}
+            </Button>
+          </>
+        )}
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Deal reviews</p>
+            <p className="mt-1 text-sm text-[#667085]">Feedback left by the participants in this deal.</p>
+          </div>
+          <Badge label={`${reviews.length} review${reviews.length === 1 ? "" : "s"}`} />
+        </div>
+        {loading ? <p className="mt-5 text-sm text-[#98A2B3]">Loading reviews…</p> : reviews.length === 0 ? <p className="mt-5 text-sm text-[#98A2B3]">No reviews have been submitted yet.</p> : (
+          <div className="mt-4 space-y-3">
+            {reviews.map((item) => (
+              <div key={item._id} className="rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#344054]">{item.reviewerId?.company || item.reviewerId?.name || "Participant"}</p>
+                    <p className="text-xs text-[#98A2B3]">{item.reviewerId?.role === "seller" ? "Seller" : "Buyer"}</p>
+                  </div>
+                  <span className="text-sm font-semibold text-[#E6A700]">{"★".repeat(item.rating)}<span className="text-[#D0D5DD]">{"★".repeat(5 - item.rating)}</span></span>
+                </div>
+                {item.comment ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#475467]">{item.comment}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+export function DealRoom({
+  deal,
+  role = "buyer",
+  initialTab = "overview",
+  controlledOpen,
+  onOpen,
+  onClose,
+  onTabChange,
+}) {
+  const isControlled = typeof controlledOpen === "boolean";
+  const [localOpen, setLocalOpen] = useState(false);
+  const [localTab, setLocalTab] = useState(initialTab);
+  const open = isControlled ? controlledOpen : localOpen;
+  const tab = isControlled ? initialTab : localTab;
+
+  const handleOpen = () => {
+    if (isControlled) onOpen?.();
+    else setLocalOpen(true);
+  };
+
+  const handleClose = () => {
+    if (isControlled) onClose?.();
+    else setLocalOpen(false);
+  };
+
+  const handleTabChange = (nextTab) => {
+    if (isControlled) onTabChange?.(nextTab);
+    else setLocalTab(nextTab);
+  };
   const [request, setRequest] = useState(null);
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestError, setRequestError] = useState("");
@@ -529,7 +708,16 @@ export function DealRoom({ deal, role = "buyer" }) {
   const currentDeal = dealState || deal;
 
   const loadRequest = async () => {
-    if (!currentDeal?.requestId) return;
+    setRequest(null);
+    setRequestError("");
+
+    if (!currentDeal?.requestId) {
+      setRequestError(
+        "This deal does not include its original purchase request reference.",
+      );
+      return;
+    }
+
     try {
       setRequestLoading(true);
       setRequestError("");
@@ -551,6 +739,10 @@ export function DealRoom({ deal, role = "buyer" }) {
       setRequestLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isControlled && !open) setLocalTab(initialTab || "overview");
+  }, [initialTab, open, isControlled]);
 
   useEffect(() => {
     if (open && tab === "quotation") loadRequest();
@@ -579,6 +771,7 @@ export function DealRoom({ deal, role = "buyer" }) {
       { id: "quotation", label: "Quotation" },
       { id: "payment", label: "Payment & Invoice" },
       { id: "dispute", label: "Dispute" },
+      ...(deal?.status === "completed" ? [{ id: "review", label: "Review" }] : []),
     ],
     [],
   );
@@ -587,7 +780,7 @@ export function DealRoom({ deal, role = "buyer" }) {
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" onClick={handleOpen}>
         Open Deal Room
       </Button>
 
@@ -622,7 +815,7 @@ export function DealRoom({ deal, role = "buyer" }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={handleClose}
                   className="rounded-lg p-2 text-[#667085] hover:bg-[#F2F4F7]"
                   aria-label="Close deal room"
                 >
@@ -635,7 +828,7 @@ export function DealRoom({ deal, role = "buyer" }) {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setTab(item.id)}
+                    onClick={() => handleTabChange(item.id)}
                     className={`rounded-lg px-3.5 py-2 text-sm font-semibold whitespace-nowrap ${
                       tab === item.id
                         ? "bg-[#F0FBF1] text-[#2E7D32]"
@@ -770,6 +963,8 @@ export function DealRoom({ deal, role = "buyer" }) {
                 />
               ) : tab === "dispute" ? (
                 <DisputePanel deal={currentDeal} role={role} />
+              ) : tab === "review" ? (
+                <ReviewPanel deal={currentDeal} role={role} />
               ) : (
                 <div className="mx-auto max-w-2xl">
                   {requestLoading ? (

@@ -8,6 +8,7 @@ import {
   createDispute,
   respondToDispute,
   updateDisputeStatus,
+  downloadDisputeEvidence,
 } from "../controllers/dispute.controller.js";
 
 const router = express.Router();
@@ -15,6 +16,7 @@ const router = express.Router();
 router.get("/", protect, authorize("buyer", "seller", "admin"), getDisputes);
 router.get("/deal/:dealId", protect, authorize("buyer", "seller", "admin"), getDealDispute);
 router.get("/:disputeId", protect, authorize("buyer", "seller", "admin"), getDisputeById);
+router.get("/:disputeId/evidence/:documentId/download", protect, authorize("buyer", "seller", "admin"), downloadDisputeEvidence);
 router.post("/deal/:dealId", protect, authorize("buyer", "seller"), createDispute);
 router.patch("/:disputeId/respond", protect, authorize("buyer", "seller"), respondToDispute);
 router.patch("/:disputeId/status", protect, authorize("admin"), updateDisputeStatus);

@@ -94,10 +94,21 @@ export const getPaymentForDeal = async (req, res) => {
     }
 
     const payment = await Payment.findOne({ dealId: adminDeal._id }).lean();
-    const invoice = await Invoice.findOne({ dealId: adminDeal._id })
+
+    // The invoice belongs to the deal, not to the payment attempt.
+    // Create it on first authorized view so buyers/sellers can review the
+    // locked commercial terms before recording a payment attempt.
+    let invoice = await Invoice.findOne({ dealId: adminDeal._id })
       .populate("buyerId", "name company email phone")
       .populate("sellerId", "name company email phone")
       .lean();
+
+    if (!invoice && getDealTotal(adminDeal) > 0) {
+      const generatedInvoice = await ensureInvoice(adminDeal);
+      invoice = generatedInvoice?.toObject
+        ? generatedInvoice.toObject()
+        : generatedInvoice;
+    }
 
     return res.json({
       success: true,

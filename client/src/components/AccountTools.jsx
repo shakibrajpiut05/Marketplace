@@ -70,6 +70,40 @@ export function NotificationBell({ compact = false, onNavigate }) {
     }
   };
 
+  const handleNotificationAction = async (item) => {
+    await markRead(item._id);
+    setOpen(false);
+
+    if (!onNavigate) return;
+
+    const type = String(item.type || "").toLowerCase();
+    const entityId = item.entityId;
+
+    if (item.entityType === "deal" && entityId) {
+      onNavigate("deal-room", entityId);
+      return;
+    }
+
+    if (item.entityType === "request") {
+      onNavigate("dashboard-section", "requests");
+      return;
+    }
+
+    if (item.entityType === "listing") {
+      onNavigate("dashboard-section", "listings");
+      return;
+    }
+
+    if (item.entityType === "requirement" || type.includes("requirement")) {
+      onNavigate("dashboard-section", "requirements");
+      return;
+    }
+
+    if (item.entityType === "kyc" || type.startsWith("kyc_")) {
+      onNavigate("verification");
+    }
+  };
+
   return (
     <div className="relative" ref={ref}>
       <button type="button" aria-label="Notifications" onClick={() => { setOpen((value) => !value); if (!open) fetchNotifications(); }} className={`${compact ? "w-9 h-9" : "w-10 h-10"} rounded-full border border-[#E5EAF0] bg-white hover:bg-[#F7F9FB] flex items-center justify-center relative`}>
@@ -85,8 +119,25 @@ export function NotificationBell({ compact = false, onNavigate }) {
                 <button type="button" onClick={() => markRead(item._id)} className="w-full text-left">
                   <div className="flex gap-3"><div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${item.read ? "bg-[#CBD5E1]" : "bg-[#5AC361]"}`} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><p className="text-sm font-semibold text-[#0F1923]">{item.title}</p><span className="text-[10px] text-[#9CA3AF] whitespace-nowrap">{formatTime(item.createdAt)}</span></div><p className="text-xs text-[#6B7280] mt-1 leading-relaxed">{item.message}</p></div></div>
                 </button>
-                {item.entityType === "request" && onNavigate && <button type="button" onClick={() => { markRead(item._id); setOpen(false); onNavigate(user?.role === "admin" ? "admin-dashboard" : `${user?.role}-dashboard`); }} className="ml-5 mt-2 text-xs font-bold text-[#3EA646] hover:underline">Open conversation →</button>}
-                {item.type === "requirement_match_found" && onNavigate && <button type="button" onClick={() => { markRead(item._id); setOpen(false); onNavigate(user?.role === "buyer" ? "buyer-dashboard" : "admin-dashboard"); }} className="ml-5 mt-2 text-xs font-bold text-[#3EA646] hover:underline">View matching opportunities →</button>}
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => handleNotificationAction(item)}
+                    className="ml-5 mt-2 text-xs font-bold text-[#3EA646] hover:underline"
+                  >
+                    {item.entityType === "deal"
+                      ? "Open Deal Room →"
+                      : item.entityType === "request"
+                      ? "Open request →"
+                      : item.entityType === "listing"
+                      ? "Open listings →"
+                      : item.entityType === "kyc"
+                      ? "Open verification →"
+                      : item.entityType === "requirement" || String(item.type || "").includes("requirement")
+                      ? "View requirements →"
+                      : "View update →"}
+                  </button>
+                )}
               </div>
             ))}
           </div>

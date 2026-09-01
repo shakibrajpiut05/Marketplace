@@ -1,4 +1,7 @@
 import mongoose from "mongoose";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import Dispute from "../models/Dispute.js";
 import Deal from "../models/Deal.js";
 import Document from "../models/Document.js";
@@ -241,5 +244,63 @@ export const updateDisputeStatus = async (req, res) => {
   } catch (error) {
     console.error("Update dispute status error:", error);
     return res.status(500).json({ success: false, message: "Failed to update dispute status" });
+  }
+};
+
+
+export const downloadDisputeEvidence = async (req, res) => {
+  try {
+    const { disputeId, documentId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(disputeId) || !mongoose.Types.ObjectId.isValid(documentId)) {
+      return res.status(400).json({ success: false, message: "Invalid dispute or document ID" });
+    }
+
+    const dispute = await Dispute.findById(disputeId).select("buyerId sellerId evidence");
+    if (!dispute) {
+      return res.status(404).json({ success: false, message: "Dispute not found" });
+    }
+
+    const canAccess =
+      req.user.role === "admin" ||
+      String(dispute.buyerId) === String(req.user._id) ||
+      String(dispute.sellerId) === String(req.user._id);
+
+    if (!canAccess) {
+      return res.status(403).json({ success: false, message: "You are not authorized to access this evidence" });
+    }
+
+    const attached = dispute.evidence.some(
+      (entry) => String(entry.documentId || "") === String(documentId),
+    );
+
+    if (!attached) {
+      return res.status(404).json({ success: false, message: "Evidence document not found in this dispute" });
+    }
+
+    const document = await Document.findById(documentId);
+    if (!document) {
+      return res.status(404).json({ success: false, message: "Document not found" });
+    }
+
+    const uploadsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../uploads/documents");
+    const requestedPath = path.resolve(uploadsRoot, path.basename(document.fileUrl || ""));
+
+    if (!requestedPath.startsWith(`${uploadsRoot}${path.sep}`)) {
+      return res.status(400).json({ success: false, message: "Invalid document path" });
+    }
+
+    if (!fs.existsSync(requestedPath)) {
+      return res.status(404).json({ success: false, message: "Evidence file is no longer available" });
+    }
+
+    res.setHeader("Content-Type", document.mimeType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${String(document.fileName || "evidence").replace(/[\"\r\n]/g, "_")}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+
+    return res.sendFile(requestedPath);
+  } catch (error) {
+    console.error("Dispute evidence download error:", error);
+    return res.status(500).json({ success: false, message: "Failed to download evidence" });
   }
 };

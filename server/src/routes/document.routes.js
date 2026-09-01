@@ -8,6 +8,7 @@ import {
   uploadKycDocument,
   getPendingKycDocuments,
   reviewKycDocument,
+  downloadDocument,
 } from "../controllers/document.controller.js";
 
 const router = express.Router();
@@ -47,6 +48,14 @@ router.patch(
   protect,
   authorize("admin"),
   reviewKycDocument,
+  downloadDocument,
 );
 
 export default router;
+
+router.get(
+  "/:documentId/download",
+  protect,
+  authorize("buyer", "seller", "admin"),
+  downloadDocument,
+);

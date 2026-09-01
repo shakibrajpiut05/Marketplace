@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   NotificationBell,
   AdminProfileMenu,
@@ -20,6 +21,29 @@ import {
   Td,
   Textarea,
 } from "../components/ui";
+const downloadDocument = async (documentId, fileName = "document") => {
+  try {
+    const response = await api.get(`/documents/${documentId}/download`, {
+      responseType: "blob",
+    });
+
+    const contentType = response.headers["content-type"] || "application/octet-stream";
+    const blob = new Blob([response.data], { type: contentType });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noreferrer";
+    anchor.download = fileName || "document";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    alert(error.response?.data?.message || "Unable to open document.");
+  }
+};
+
 const NAV = [
   { id: "dashboard", label: "Dashboard" },
   { id: "requests", label: "Purchase Requests" },
@@ -408,14 +432,13 @@ function VerificationQueue({ kycDocuments, kycLoading, kycError, reviewKyc }) {
                     {selected.fileName}
                   </p>
 
-                  <a
-                    href={`http://localhost:8000${selected.fileUrl}`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => downloadDocument(selected._id, selected.fileName)}
                     className="text-xs text-[#5AC361] hover:underline"
                   >
                     Open document
-                  </a>
+                  </button>
                 </div>
 
                 <p className="text-[10px] text-[#9CA3AF]">
@@ -507,7 +530,10 @@ function VerificationQueue({ kycDocuments, kycLoading, kycError, reviewKyc }) {
 }
 
 function AdminDashboard({ onNavigate }) {
-  const [active, setActive] = useState("dashboard");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const validSections = useMemo(() => new Set(["dashboard", "verification", "requests", "quotations", "listings", "deals", "disputes", "messages"]), []);
+  const initialSection = validSections.has(searchParams.get("section")) ? searchParams.get("section") : "dashboard";
+  const [active, setActive] = useState(initialSection);
   const [kycDocuments, setKycDocuments] = useState([]);
   const [kycLoading, setKycLoading] = useState(true);
   const [kycError, setKycError] = useState("");
@@ -523,9 +549,9 @@ function AdminDashboard({ onNavigate }) {
   const [selectedRequestId, setSelectedRequestId] = useState("");
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
 
-  const fetchPurchaseRequests = async () => {
+  const fetchPurchaseRequests = async ({ silent = false } = {}) => {
     try {
-      setRequestLoading(true);
+      if (!silent) setRequestLoading(true);
       setRequestError("");
 
       const response = await api.get("/requests/admin");
@@ -544,9 +570,9 @@ function AdminDashboard({ onNavigate }) {
     }
   };
 
-  const fetchDeals = async () => {
+  const fetchDeals = async ({ silent = false } = {}) => {
     try {
-      setDealLoading(true);
+      if (!silent) setDealLoading(true);
       setDealError("");
 
       const response = await api.get("/deals/admin");
@@ -576,6 +602,23 @@ function AdminDashboard({ onNavigate }) {
   const markMessagesRead = async () => {
     await fetchMessageUnreadCount();
   };
+
+  useEffect(() => {
+    const current = searchParams.get("section");
+    if (active === "dashboard") {
+      if (current) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("section");
+        setSearchParams(next, { replace: true });
+      }
+      return;
+    }
+    if (current !== active) {
+      const next = new URLSearchParams(searchParams);
+      next.set("section", active);
+      setSearchParams(next, { replace: true });
+    }
+  }, [active, searchParams, setSearchParams]);
 
   const updateDealStatus = async (dealId, status, paymentStatus) => {
     try {
@@ -642,9 +685,9 @@ function AdminDashboard({ onNavigate }) {
     }
   };
 
-  const fetchKycDocuments = async () => {
+  const fetchKycDocuments = async ({ silent = false } = {}) => {
     try {
-      setKycLoading(true);
+      if (!silent) setKycLoading(true);
       setKycError("");
 
       const response = await api.get("/admin/kyc");
@@ -663,9 +706,9 @@ function AdminDashboard({ onNavigate }) {
     }
   };
 
-  const fetchListings = async () => {
+  const fetchListings = async ({ silent = false } = {}) => {
     try {
-      setListingLoading(true);
+      if (!silent) setListingLoading(true);
       setListingError("");
 
       const response = await api.get("/admin/listings");
@@ -728,8 +771,20 @@ function AdminDashboard({ onNavigate }) {
     fetchPurchaseRequests();
     fetchDeals();
     fetchMessageUnreadCount();
-    const interval = window.setInterval(fetchMessageUnreadCount, 10000);
-    return () => window.clearInterval(interval);
+
+    const refresh = () => {
+      fetchKycDocuments({ silent: true });
+      fetchListings({ silent: true });
+      fetchPurchaseRequests({ silent: true });
+      fetchDeals({ silent: true });
+      fetchMessageUnreadCount();
+    };
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
 
   const totalCommission = deals.reduce(
@@ -1201,14 +1256,13 @@ function AdminDashboard({ onNavigate }) {
                       </div>
 
                       {listing.documentId?.fileUrl && (
-                        <a
-                          href={`http://localhost:8000${listing.documentId.fileUrl}`}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => downloadDocument(listing.documentId._id, listing.documentId.fileName)}
                           className="rounded-lg border border-[#E5EAF0] px-4 py-2 text-sm text-center text-[#374151] hover:bg-[#F7F9FB]"
                         >
                           View Proof
-                        </a>
+                        </button>
                       )}
 
                       <Button

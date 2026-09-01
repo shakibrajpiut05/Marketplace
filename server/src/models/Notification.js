@@ -35,6 +35,7 @@ const notificationSchema = new mongoose.Schema(
         "offer_updated",
         "offer_accepted",
         "purchase_request_created",
+        "quotation_sent",
         "requirement_match_found",
       ],
       required: true,

@@ -826,6 +826,17 @@ export const setAdminOffer = async (
       });
     }
 
+    const existingDeal = await Deal.findOne({ requestId: request._id }).select("_id status quotationVersion").lean();
+
+    if (existingDeal) {
+      return res.status(409).json({
+        success: false,
+        message: "This request already has a deal. A new quotation cannot be issued.",
+        code: "DEAL_ALREADY_EXISTS",
+        dealId: existingDeal._id,
+      });
+    }
+
     if (
       [
         "approved",

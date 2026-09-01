@@ -13,9 +13,78 @@ import {
   Td,
 } from "../components/ui";
 import { DealRoom } from "../components/DealRoom.jsx";
+import { DealsSection } from "../components/DealsSection.jsx";
 import { DisputesPage } from "../components/DisputeCenter.jsx";
 import { MessageChat } from "../components/MessageCenter.jsx";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+
+function CompactSellerRequests({ requests = [], loading = false, error = "", onRetry, onRead }) {
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
+
+  const normalized = requests.map((request) => ({
+    ...request,
+    _bucket: ["completed", "cancelled", "rejected"].includes(String(request.status || "").toLowerCase())
+      ? "closed"
+      : ["new", "reviewing"].includes(String(request.status || "").toLowerCase())
+        ? "new"
+        : "active",
+  }));
+  const counts = {
+    all: normalized.length,
+    new: normalized.filter((r) => r._bucket === "new").length,
+    active: normalized.filter((r) => r._bucket === "active").length,
+    closed: normalized.filter((r) => r._bucket === "closed").length,
+  };
+  const visible = normalized.filter((r) => {
+    const matches = filter === "all" || r._bucket === filter;
+    const q = query.trim().toLowerCase();
+    if (!matches) return false;
+    if (!q) return true;
+    return [r._id, r.listing?.category, r.listing?.location, r.buyer?.company, r.buyerId?.company, r.status]
+      .filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+  const tone = {
+    new: "bg-[#ECFDF3] text-[#087443] border-[#B7E4C7]",
+    active: "bg-[#EEF4FF] text-[#175CD3] border-[#C7D7FE]",
+    closed: "bg-[#F2F4F7] text-[#475467] border-[#D0D5DD]",
+  };
+  const label = (r) => r._bucket === "new" ? "New request" : r._bucket === "closed" ? (r.status === "completed" ? "Completed" : "Closed") : (r.status || "In progress");
+
+  if (loading) return <Card><div className="space-y-3 p-5"><div className="h-5 w-40 animate-pulse rounded bg-[#F2F4F7]"/><div className="h-20 animate-pulse rounded-xl bg-[#F8FAFC]"/><div className="h-20 animate-pulse rounded-xl bg-[#F8FAFC]"/></div></Card>;
+  if (error) return <Card><div className="p-8 text-center"><p className="text-sm font-semibold text-[#B42318]">Unable to load purchase requests</p><p className="mt-1 text-sm text-[#667085]">{error}</p><Button size="sm" variant="outline" className="mt-4" onClick={onRetry}>Retry</Button></div></Card>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Seller workspace</p><h2 className="mt-1 font-heading text-xl font-semibold text-[#101828]">Purchase Requests</h2><p className="mt-1 text-sm text-[#667085]">Review incoming buyer requests and keep each transaction moving.</p></div>
+        <span className="rounded-full bg-[#F2F4F7] px-3 py-1.5 text-xs font-semibold text-[#475467]">{requests.length} request{requests.length === 1 ? "" : "s"}</span>
+      </div>
+      <Card className="overflow-hidden">
+        <div className="border-b border-[#EAECF0] p-3">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search buyer, category, location or ID..." className="w-full rounded-xl border border-[#D0D5DD] bg-[#FCFCFD] px-3.5 py-2.5 text-sm text-[#344054] outline-none focus:border-[#3EA646]"/>
+          <div className="mt-3 flex flex-wrap gap-2">{[["all","All"],["new","New"],["active","In progress"],["closed","Closed"]].map(([key,text]) => <button key={key} type="button" onClick={() => setFilter(key)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filter === key ? "bg-[#101828] text-white" : "bg-[#F2F4F7] text-[#475467] hover:bg-[#E4E7EC]"}`}>{text} <span className="ml-1 opacity-70">{counts[key]}</span></button>)}</div>
+        </div>
+        {visible.length === 0 ? <div className="px-6 py-14 text-center"><p className="text-sm font-semibold text-[#344054]">No purchase requests found</p><p className="mt-1 text-sm text-[#667085]">Try another filter or search term.</p></div> : <div className="divide-y divide-[#EAECF0]">
+          {visible.map((request) => {
+            const id=request._id, open=expandedId===id, category=request.listing?.category||"Credit Request", qty=Number(request.requestedQuantity||0), price=request.listing?.price, location=request.listing?.location||"—", buyer=request.buyer?.company||request.buyerId?.company||request.buyerId?.name||"Verified Buyer";
+            return <div key={id} className="px-4 py-3.5 sm:px-5">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_250px_auto] lg:items-center">
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-semibold text-[#101828]">{category}</h3><span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tone[request._bucket]}`}>{label(request)}</span></div><p className="mt-1 text-xs text-[#667085]">#{String(id).slice(-8)} · {qty.toLocaleString("en-IN")} MT · {location}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#667085]"><span>Buyer: {buyer}</span>{price != null && <span>₹{Number(price).toLocaleString("en-IN")}/MT</span>}{request.createdAt && <span>{new Date(request.createdAt).toLocaleDateString("en-IN")}</span>}</div></div>
+                <div className="rounded-xl bg-[#F8FAFC] px-3 py-2.5"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#98A2B3]">Next step</p><p className="mt-0.5 text-xs font-semibold text-[#344054]">{request._bucket === "new" ? "Review request" : request._bucket === "closed" ? "No action required" : "Keep transaction moving"}</p></div>
+                <div className="flex items-center gap-2 lg:justify-end"><button type="button" onClick={() => setExpandedId(open ? null : id)} className="rounded-lg border border-[#D0D5DD] px-3 py-2 text-xs font-semibold text-[#475467] hover:bg-[#F9FAFB]">{open ? "Hide" : "Details"}</button><Button size="sm" variant="outline" onClick={() => { onRead?.(id); }} >Messages</Button></div>
+              </div>
+              {open && <div className="mt-3 grid gap-3 rounded-xl border border-[#EAECF0] bg-[#FCFCFD] p-3 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Buyer</p><p className="mt-1 text-sm font-medium text-[#344054]">{buyer}</p></div><div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Quantity</p><p className="mt-1 text-sm font-medium text-[#344054]">{qty.toLocaleString("en-IN")} MT</p></div><div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Listed price</p><p className="mt-1 text-sm font-medium text-[#344054]">{price != null ? `₹${Number(price).toLocaleString("en-IN")}/MT` : "—"}</p></div><div><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Estimated value</p><p className="mt-1 text-sm font-semibold text-[#2E7D32]">₹{(qty*Number(price||0)).toLocaleString("en-IN")}</p></div>{request.notes && <div className="sm:col-span-2 lg:col-span-4 border-t border-[#EAECF0] pt-3"><p className="text-[10px] uppercase tracking-wider text-[#98A2B3]">Buyer requirements</p><p className="mt-1 text-sm text-[#475467]">{request.notes}</p></div>}<div className="sm:col-span-2 lg:col-span-4"><MessageChat requestId={id} role="seller" compact onRead={onRead}/></div></div>}
+            </div>;
+          })}
+        </div>}
+      </Card>
+    </div>
+  );
+}
+
 const NAV = [
   {
     id: "dashboard",
@@ -172,7 +241,39 @@ const NAV = [
 ];
 function SellerDashboard({ onNavigate }) {
   const { user } = useAuth();
-  const [active, setActive] = useState("dashboard");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const validSections = useMemo(() => new Set(["dashboard", "listings", "requests", "deals", "messages", "profile"]), []);
+  const initialSection = validSections.has(searchParams.get("section")) ? searchParams.get("section") : "dashboard";
+  const [active, setActive] = useState(initialSection);
+  const validDealTabs = useMemo(() => new Set(["overview", "messages", "quotation", "payment", "dispute", "review"]), []);
+  const openDealId = searchParams.get("deal");
+  const openDealTab = validDealTabs.has(searchParams.get("dealTab")) ? searchParams.get("dealTab") : "overview";
+
+  const openDealRoom = (deal, tab = "overview") => {
+    if (!deal?._id) return;
+    setActive("deals");
+    const next = new URLSearchParams(searchParams);
+    next.set("section", "deals");
+    next.set("deal", String(deal._id));
+    if (validDealTabs.has(tab) && tab !== "overview") next.set("dealTab", tab);
+    else next.delete("dealTab");
+    setSearchParams(next);
+  };
+
+  const closeDealRoom = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("deal");
+    next.delete("dealTab");
+    setSearchParams(next, { replace: true });
+  };
+
+  const updateDealRoomTab = (tab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("section", "deals");
+    if (validDealTabs.has(tab) && tab !== "overview") next.set("dealTab", tab);
+    else next.delete("dealTab");
+    setSearchParams(next, { replace: true });
+  };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [purchaseRequests, setPurchaseRequests] = useState([]);
   const [requestLoading, setRequestLoading] = useState(true);
@@ -182,6 +283,23 @@ function SellerDashboard({ onNavigate }) {
   const [dealError, setDealError] = useState("");
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [messageUnreadByRequest, setMessageUnreadByRequest] = useState({});
+
+  useEffect(() => {
+    const current = searchParams.get("section");
+    if (active === "dashboard") {
+      if (current) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("section");
+        setSearchParams(next, { replace: true });
+      }
+      return;
+    }
+    if (current !== active) {
+      const next = new URLSearchParams(searchParams);
+      next.set("section", active);
+      setSearchParams(next, { replace: true });
+    }
+  }, [active, searchParams, setSearchParams]);
 
   const sellerCompany = user?.company?.trim() || user?.name?.trim() || "Seller";
   const sellerName = user?.name?.trim() || "Seller";
@@ -209,9 +327,9 @@ function SellerDashboard({ onNavigate }) {
     setMessageUnreadCount((current) => Math.max(0, current - count));
   };
 
-  const fetchSellerDeals = async () => {
+  const fetchSellerDeals = async ({ silent = false } = {}) => {
     try {
-      setDealLoading(true);
+      if (!silent) setDealLoading(true);
       setDealError("");
 
       const response = await api.get("/deals/seller");
@@ -226,13 +344,13 @@ function SellerDashboard({ onNavigate }) {
         error.response?.data?.message || "Failed to load your deals.",
       );
     } finally {
-      setDealLoading(false);
+      if (!silent) setDealLoading(false);
     }
   };
 
-  const fetchPurchaseRequests = async () => {
+  const fetchPurchaseRequests = async ({ silent = false } = {}) => {
     try {
-      setRequestLoading(true);
+      if (!silent) setRequestLoading(true);
       setRequestError("");
 
       const response = await api.get("/requests/seller");
@@ -247,27 +365,35 @@ function SellerDashboard({ onNavigate }) {
         error.response?.data?.message || "Failed to load purchase requests.",
       );
     } finally {
-      setRequestLoading(false);
+      if (!silent) setRequestLoading(false);
     }
   };
 
   useEffect(() => {
     fetchPurchaseRequests();
     fetchSellerDeals();
-  }, []);
-  useEffect(() => {
-    fetchMessageUnread();
-    const interval = window.setInterval(fetchMessageUnread, 10000);
-    return () => window.clearInterval(interval);
-  }, []);
+  
 
+    const refresh = () => {
+      fetchSellerDeals({ silent: true });
+      fetchSellerListings({ silent: true });
+      fetchPurchaseRequests({ silent: true });
+      fetchMessageUnread();
+    };
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
   const [sellerListings, setSellerListings] = useState([]);
   const [listingLoading, setListingLoading] = useState(true);
   const [listingError, setListingError] = useState("");
 
-  const fetchSellerListings = async () => {
+  const fetchSellerListings = async ({ silent = false } = {}) => {
     try {
-      setListingLoading(true);
+      if (!silent) setListingLoading(true);
       setListingError("");
 
       const response = await api.get("/listings/seller");
@@ -281,7 +407,7 @@ function SellerDashboard({ onNavigate }) {
         error.response?.data?.message || "Failed to load your listings.",
       );
     } finally {
-      setListingLoading(false);
+      if (!silent) setListingLoading(false);
     }
   };
 
@@ -631,8 +757,8 @@ function SellerDashboard({ onNavigate }) {
 
               <section className="mb-7">
                 <SectionHeader
-                  title="Action required"
-                  description="The items most likely to need your attention next."
+                  title="Action Center"
+                  description="Your next steps, surfaced from requests, deals, messages, and inventory."
                 />
                 <div className="grid gap-3 lg:grid-cols-3">
                   {actionItems.map((item, index) => {
@@ -914,488 +1040,27 @@ function SellerDashboard({ onNavigate }) {
             </Card>
           )}
           {active === "requests" && (
-            <Card>
-              <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
-                <div>
-                  <h2
-                    className="font-semibold text-[#0F1923]"
-                    style={{
-                      fontFamily: "Outfit, sans-serif",
-                    }}
-                  >
-                    Purchase Requests
-                  </h2>
-
-                  <p className="text-xs text-[#9CA3AF] mt-1">
-                    Buyer requests received for your listings.
-                  </p>
-                </div>
-
-                <Badge label={`${purchaseRequests.length} Requests`} />
-              </div>
-
-              {requestLoading ? (
-                <div className="py-16 text-center text-[#9CA3AF]">
-                  Loading purchase requests...
-                </div>
-              ) : requestError ? (
-                <div className="py-16 text-center text-[#EF4444]">
-                  {requestError}
-                </div>
-              ) : purchaseRequests.length === 0 ? (
-                <div className="py-16 text-center text-[#9CA3AF]">
-                  <p className="text-lg font-semibold text-[#374151]">
-                    No purchase requests yet
-                  </p>
-
-                  <p className="text-sm mt-1">
-                    Requests from buyers will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y divide-[#E5EAF0]">
-                  {purchaseRequests.map((request) => (
-                    <div key={request._id} className="p-5">
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-4">
-                            <h3
-                              className="font-semibold text-[#0F1923]"
-                              style={{
-                                fontFamily: "Outfit, sans-serif",
-                              }}
-                            >
-                              {request.listing?.category || "Credit Request"}
-                            </h3>
-
-                            <Badge label={request.status} />
-                          </div>
-
-                          <div className="mb-4">
-                            <MessageChat
-                              requestId={request._id}
-                              role="seller"
-                              compact
-                              onRead={markRequestMessagesRead}
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">Buyer</p>
-
-                              <p className="font-medium text-[#374151]">
-                                {request.buyer?.company ||
-                                  request.buyerId?.company ||
-                                  request.buyerId?.name ||
-                                  "—"}
-                              </p>
-                            </div>
-
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Contact Person
-                              </p>
-
-                              <p className="font-medium text-[#374151]">
-                                {request.contactPerson || "—"}
-                              </p>
-                            </div>
-
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Requested Quantity
-                              </p>
-
-                              <p className="font-medium text-[#374151]">
-                                {request.requestedQuantity} MT
-                              </p>
-                            </div>
-
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Your Listing
-                              </p>
-
-                              <p className="font-medium text-[#374151]">
-                                {request.listing?.category || "—"}
-                              </p>
-                            </div>
-
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Listed Price
-                              </p>
-
-                              <p className="font-medium text-[#374151]">
-                                ₹{request.listing?.price ?? "—"} / MT
-                              </p>
-                            </div>
-
-                            <div>
-                              <p className="text-xs text-[#9CA3AF]">
-                                Estimated Value
-                              </p>
-
-                              <p className="font-semibold text-[#5AC361]">
-                                ₹
-                                {(
-                                  Number(request.requestedQuantity || 0) *
-                                  Number(request.listing?.price || 0)
-                                ).toLocaleString("en-IN")}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 bg-[#F7F9FB] rounded-xl p-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                              <div>
-                                <span className="text-xs text-[#9CA3AF]">
-                                  Buyer
-                                </span>
-                                <p className="font-medium text-[#374151]">
-                                  {request.buyer?.company || "Verified Buyer"}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-xs text-[#9CA3AF]">
-                                  Request ID
-                                </span>
-                                <p className="font-mono text-xs text-[#374151]">
-                                  #{request._id?.slice(-6)}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-xs text-[#9CA3AF]">
-                                  Submitted
-                                </span>
-                                <p className="font-medium text-[#374151]">
-                                  {request.createdAt
-                                    ? new Date(
-                                        request.createdAt,
-                                      ).toLocaleString("en-IN")
-                                    : "—"}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-xs text-[#9CA3AF]">
-                                  Status
-                                </span>
-                                <p className="font-medium text-[#374151] capitalize">
-                                  {request.status}
-                                </p>
-                              </div>
-                            </div>
-                            {request.notes && (
-                              <div className="mt-3 pt-3 border-t border-[#E5EAF0]">
-                                <span className="text-xs text-[#9CA3AF]">
-                                  Buyer Requirements
-                                </span>
-                                <p className="text-sm text-[#374151] mt-1">
-                                  {request.notes}
-                                </p>
-                              </div>
-                            )}
-                            <div className="mt-4 p-3 bg-[#EBF8EC] rounded-lg">
-                              <p className="text-xs text-[#2E7D32] leading-relaxed">
-                                EPR Nexus manages buyer-seller communication and
-                                communication. Direct buyer contact details are
-                                kept confidential.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
+            <CompactSellerRequests
+              requests={purchaseRequests}
+              loading={requestLoading}
+              error={requestError}
+              onRetry={() => fetchPurchaseRequests()}
+              onRead={markRequestMessagesRead}
+            />
           )}
 
           {active === "deals" && (
-            <Card>
-              <div className="px-5 py-4 border-b border-[#E5EAF0] flex items-center justify-between">
-                <div>
-                  <h2
-                    className="font-semibold text-[#0F1923]"
-                    style={{
-                      fontFamily: "Outfit, sans-serif",
-                    }}
-                  >
-                    My Deals
-                  </h2>
-
-                  <p className="text-xs text-[#9CA3AF] mt-1">
-                    Track transactions managed by EPR Nexus.
-                  </p>
-                </div>
-
-                <Badge label={`${sellerDeals.length} Deals`} />
-              </div>
-
-              {dealLoading ? (
-                <div className="py-16 text-center text-[#9CA3AF]">
-                  Loading your deals...
-                </div>
-              ) : dealError ? (
-                <div className="py-16 text-center text-[#EF4444]">
-                  {dealError}
-                </div>
-              ) : sellerDeals.length === 0 ? (
-                <div className="py-16 text-center text-[#9CA3AF]">
-                  <p className="text-lg font-semibold text-[#374151]">
-                    No deals yet
-                  </p>
-
-                  <p className="text-sm mt-1">
-                    Managed transactions will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y divide-[#E5EAF0]">
-                  {sellerDeals.map((deal) => {
-                    const statusLabel =
-                      {
-                        matched: "Matched",
-                        negotiating: "Negotiating",
-                        terms_agreed: "Terms Agreed",
-                        payment_coordination: "Payment Coordination",
-                        completed: "Completed",
-                        cancelled: "Cancelled",
-                      }[deal.status] || deal.status;
-
-                    const estimatedValue =
-                      Number(deal.quantity || 0) *
-                      Number(deal.agreedPrice || 0);
-
-                    return (
-                      <div key={deal._id} className="p-5">
-                        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-6">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-4">
-                              <h3
-                                className="font-semibold text-[#0F1923]"
-                                style={{
-                                  fontFamily: "Outfit, sans-serif",
-                                }}
-                              >
-                                {deal.listing?.category || "EPR Credit Deal"}
-                              </h3>
-
-                              <Badge label={statusLabel} />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Deal ID
-                                </p>
-
-                                <p className="font-mono text-xs text-[#374151]">
-                                  #{deal._id.slice(-8)}
-                                </p>
-                              </div>
-
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Quantity
-                                </p>
-
-                                <p className="font-medium text-[#374151]">
-                                  {deal.quantity} MT
-                                </p>
-                              </div>
-
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Agreed Price
-                                </p>
-
-                                <p className="font-medium text-[#374151]">
-                                  ₹{deal.agreedPrice} / MT
-                                </p>
-                              </div>
-
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Credit Value
-                                </p>
-                                <p className="font-semibold text-[#5AC361]">
-                                  ₹
-                                  {Number(
-                                    deal.creditSubtotal ?? estimatedValue,
-                                  ).toLocaleString("en-IN")}
-                                </p>
-                              </div>
-
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  EPR Nexus Fee
-                                </p>
-                                <p className="font-medium text-[#374151]">
-                                  ₹
-                                  {Number(
-                                    deal.serviceFee ??
-                                      deal.commissionAmount ??
-                                      0,
-                                  ).toLocaleString("en-IN")}
-                                </p>
-                              </div>
-
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Buyer Total
-                                </p>
-                                <p className="font-semibold text-[#0F1923]">
-                                  ₹
-                                  {Number(
-                                    deal.finalAmount ??
-                                      estimatedValue +
-                                        Number(
-                                          deal.serviceFee ??
-                                            deal.commissionAmount ??
-                                            0,
-                                        ),
-                                  ).toLocaleString("en-IN")}
-                                </p>
-                              </div>
-
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Commission
-                                </p>
-
-                                <p className="font-medium text-[#374151]">
-                                  ₹
-                                  {Number(
-                                    deal.commissionAmount || 0,
-                                  ).toLocaleString("en-IN")}
-                                </p>
-                              </div>
-
-                              <div className="bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl p-3">
-                                <p className="text-xs text-[#9CA3AF] mb-1">
-                                  Payment
-                                </p>
-
-                                <p className="font-medium text-[#374151] capitalize">
-                                  {deal.paymentStatus || "pending"}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 p-4 bg-[#F7F9FB] border border-[#E5EAF0] rounded-xl">
-                              <p className="text-xs font-semibold text-[#6B7280] mb-3 uppercase tracking-wide">
-                                Deal Progress
-                              </p>
-
-                              <div className="flex items-center gap-1 overflow-x-auto">
-                                {[
-                                  { key: "matched", label: "Matched" },
-                                  {
-                                    key: "terms_agreed",
-                                    label: "Quotation Accepted",
-                                  },
-                                  {
-                                    key: "payment_coordination",
-                                    label: "Payment Coordination",
-                                  },
-                                  { key: "completed", label: "Completed" },
-                                ].map((stage, index, stages) => {
-                                  const order = [
-                                    "matched",
-                                    "terms_agreed",
-                                    "payment_coordination",
-                                    "completed",
-                                  ];
-
-                                  const currentIndex = order.indexOf(
-                                    deal.status,
-                                  );
-
-                                  const stageIndex = order.indexOf(stage.key);
-
-                                  const done = currentIndex >= stageIndex;
-
-                                  return (
-                                    <div
-                                      key={stage.key}
-                                      className="flex items-center gap-1 shrink-0"
-                                    >
-                                      <div
-                                        className={`px-2 py-1 rounded text-[10px] font-medium whitespace-nowrap ${
-                                          done
-                                            ? "bg-[#5AC361] text-white"
-                                            : "bg-[#F0F4F8] text-[#9CA3AF]"
-                                        }`}
-                                      >
-                                        {stage.label}
-                                      </div>
-
-                                      {index < stages.length - 1 && (
-                                        <div
-                                          className={`w-3 h-0.5 ${
-                                            done
-                                              ? "bg-[#5AC361]"
-                                              : "bg-[#E5EAF0]"
-                                          }`}
-                                        />
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            <div className="mt-4 p-3 bg-[#EBF8EC] rounded-lg">
-                              <p className="text-xs text-[#2E7D32] leading-relaxed">
-                                EPR Nexus manages the transaction process and
-                                keeps buyer contact information confidential.
-                              </p>
-                            </div>
-
-                            {deal.notes && (
-                              <div className="mt-3">
-                                <p className="text-xs text-[#9CA3AF]">
-                                  Deal Notes
-                                </p>
-
-                                <p className="text-sm text-[#374151] mt-1">
-                                  {deal.notes}
-                                </p>
-                              </div>
-                            )}
-
-                            <div className="mt-4 flex justify-end">
-                              <DealRoom deal={deal} role="seller" />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 pt-4 border-t border-[#E5EAF0] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div className="text-xs text-[#9CA3AF]">
-                            Created{" "}
-                            {deal.createdAt
-                              ? new Date(deal.createdAt).toLocaleString("en-IN")
-                              : "—"}
-                          </div>
-
-                          {deal.completedAt && (
-                            <div className="text-xs font-medium text-[#2E7D32]">
-                              Completed{" "}
-                              {new Date(deal.completedAt).toLocaleString(
-                                "en-IN",
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
+            <DealsSection
+              deals={sellerDeals}
+              role="seller"
+              loading={dealLoading}
+              error={dealError}
+              openDealId={openDealId}
+              openDealTab={openDealTab}
+              onOpenDealRoom={openDealRoom}
+              onCloseDealRoom={closeDealRoom}
+              onDealRoomTabChange={updateDealRoomTab}
+            />
           )}
 
           {active === "disputes" && <DisputesPage role="seller" />}
