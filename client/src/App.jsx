@@ -11,6 +11,8 @@ import {
 } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import MarketplacePage from './pages/MarketplacePage'
+import HowItWorksPage from './pages/HowItWorksPage'
+import AboutUsPage from './pages/AboutUsPage'
 import CreditDetailPage from './pages/CreditDetailPage'
 import AuthPage from './pages/AuthPage'
 import SellerDashboard from './pages/SellerDashboard'
@@ -25,6 +27,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import { useAuth } from './context/AuthContext.jsx'
 import { NotificationBell, ProfileMenu, AdminProfileMenu } from './components/AccountTools.jsx'
+import logo from "../public/logo.jpeg"
 
 const DASHBOARD_PATHS = ['/seller', '/buyer', '/admin', '/seller/listings/new', '/verification']
 
@@ -37,6 +40,8 @@ const getDashboardPathForRole = (role) => {
 
 const getPageKey = (pathname) => {
   if (pathname === '/marketplace') return 'marketplace'
+  if (pathname === '/how-it-works') return 'how-it-works'
+  if (pathname === '/about-us') return 'about-us'
   if (pathname.startsWith('/credits/')) return 'credit-detail'
   if (pathname === '/login') return 'auth'
   if (pathname === '/signup') return 'auth-signup'
@@ -81,8 +86,8 @@ function Navbar({ page, onNavigate }) {
   const publicLinks = [
     { label: 'Marketplace', page: 'marketplace' },
     ...(user?.role === 'buyer' || !isAuthenticated ? [{ label: 'Post Requirement', page: 'buyer-dashboard' }] : []),
-    { label: 'How It Works', page: 'home' },
-    { label: 'About Us', page: 'home' },
+    { label: 'How It Works', page: 'how-it-works' },
+    { label: 'About Us', page: 'about-us' },
   ]
 
   const handleNavigate = (target, id) => {
@@ -91,14 +96,14 @@ function Navbar({ page, onNavigate }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[#E5EAF0]/90 bg-white/95 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-[#E5EAF0]/90 bg-gray-100 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <button type="button" onClick={() => handleNavigate('home')} className="group flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361] focus-visible:ring-offset-2" aria-label="EPR Nexus home">
-          <BrandMark />
-          <div className="hidden min-w-0 text-left sm:block">
-            <p className="truncate font-heading text-sm font-bold leading-none tracking-[-0.01em] text-[#0F1923]">EPR Nexus</p>
-            <p className="mt-1 truncate text-[10px] leading-none text-[#8A94A3]">Connecting Value. Ensuring Compliance.</p>
-          </div>
+          <img 
+        src={logo} 
+        alt="EPR Nexus Logo" 
+        className="h-15 w-auto object-contain rounded-sm" 
+      />
         </button>
 
         <nav className="hidden items-center gap-0.5 md:flex" aria-label="Primary navigation">
@@ -164,13 +169,17 @@ function PublicFooter({ user, onNavigate }) {
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <div className="max-w-sm">
             <button type="button" onClick={() => onNavigate('home')} className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361] focus-visible:ring-offset-2 focus-visible:ring-offset-[#101820]">
-              <BrandMark size="sm" /><span className="font-heading text-sm font-bold">EPR Nexus</span>
-            </button>
+               <img 
+        src={logo} 
+        alt="EPR Nexus Logo" 
+        className="h-15 w-auto object-contain rounded-sm" 
+      />
+            </button> 
             <p className="mt-4 text-sm leading-6 text-white/55">India's B2B EPR credit marketplace for verified buyers and sellers, with mediated transactions and compliance-focused workflows.</p>
           </div>
           {[
-            { title: 'Platform', links: [{ label: 'Browse Credits', page: 'marketplace' }, ...(user?.role === 'seller' || user?.role === 'admin' ? [] : [{ label: 'Post Requirement', page: 'buyer-dashboard' }]), { label: 'How It Works', page: 'home' }] },
-            { title: 'Company', links: [{ label: 'About Us', page: 'home' }, { label: 'Contact', page: 'home' }, { label: 'Careers', page: 'home' }] },
+            { title: 'Platform', links: [{ label: 'Browse Credits', page: 'marketplace' }, ...(user?.role === 'seller' || user?.role === 'admin' ? [] : [{ label: 'Post Requirement', page: 'buyer-dashboard' }]), { label: 'How It Works', page: 'how-it-works' }] },
+            { title: 'Company', links: [{ label: 'About Us', page: 'about-us' }, { label: 'Contact', page: 'home' }, { label: 'Careers', page: 'home' }] },
             { title: 'Legal', links: [{ label: 'Privacy Policy', page: 'home' }, { label: 'Terms of Service', page: 'home' }, { label: 'Compliance', page: 'home' }] },
           ].map((column) => (
             <div key={column.title}><p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/70">{column.title}</p><ul className="mt-4 space-y-2.5">{column.links.map((link) => <li key={link.label}><button type="button" onClick={() => onNavigate(link.page)} className="text-sm text-white/45 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AC361]">{link.label}</button></li>)}</ul></div>
@@ -191,7 +200,7 @@ function RouterApp() {
 
   const legacyNavigate = (target, id) => {
     const paths = {
-      home: '/', marketplace: '/marketplace', auth: '/login', 'auth-signup': '/signup',
+      home: '/', marketplace: '/marketplace', 'how-it-works': '/how-it-works', 'about-us': '/about-us', auth: '/login', 'auth-signup': '/signup',
       'forgot-password': '/forgot-password', 'email-pending': '/email-pending',
       'google-signup-phone': '/google-signup-phone', verification: '/verification',
       'seller-dashboard': '/seller', 'buyer-dashboard': '/buyer', 'admin-dashboard': '/admin',
@@ -237,6 +246,8 @@ function RouterApp() {
         <Routes>
           <Route path="/" element={<RootRoute onNavigate={legacyNavigate} />} />
           <Route path="/marketplace" element={<HomeRoute component={MarketplacePage} onNavigate={legacyNavigate} />} />
+          <Route path="/how-it-works" element={<HomeRoute component={HowItWorksPage} onNavigate={legacyNavigate} />} />
+          <Route path="/about-us" element={<HomeRoute component={AboutUsPage} onNavigate={legacyNavigate} />} />
           <Route path="/credits/:creditId" element={<CreditRoute onNavigate={legacyNavigate} />} />
           <Route path="/login" element={<AuthRoute initialMode="login" onNavigate={legacyNavigate} />} />
           <Route path="/signup" element={<AuthRoute initialMode="signup" onNavigate={legacyNavigate} />} />

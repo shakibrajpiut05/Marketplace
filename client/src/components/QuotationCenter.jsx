@@ -827,17 +827,38 @@ export default function QuotationCenter({
                     </p>
 
                     <div className="mt-4 rounded-lg bg-[#F0FBF1] border border-[#CFE8D1] p-3">
-                      <p className="text-xs font-semibold text-[#2E7D32]">
-                        Deal created · Payment pending
-                      </p>
+                      {(() => {
+                        const dealStatus = String(
+                          selected.deal?.status || selected.status || "",
+                        ).toLowerCase();
+                        const paymentStatus = String(
+                          selected.deal?.paymentStatus ||
+                            (dealStatus === "completed" ? "received" : "pending"),
+                        ).toLowerCase();
+                        const completed = dealStatus === "completed";
+                        const received =
+                          completed || paymentStatus === "received";
 
-                      <p className="text-xs text-[#52715A] mt-1">
-                        The buyer accepted the quotation, so the transaction
-                        has moved out of the quotation stage. Inventory is
-                        reserved automatically, but payment has not been
-                        received. Continue the transaction from Deals /
-                        Transactions.
-                      </p>
+                        return (
+                          <>
+                            <p className="text-xs font-semibold text-[#2E7D32]">
+                              {completed
+                                ? "Deal completed · Payment received"
+                                : received
+                                  ? "Deal created · Payment received"
+                                  : "Deal created · Payment pending"}
+                            </p>
+
+                            <p className="text-xs text-[#52715A] mt-1">
+                              {completed
+                                ? "Payment was verified and this transaction has been completed successfully."
+                                : received
+                                  ? "Payment has been verified. Continue the transaction from Deals / Transactions to complete the deal."
+                                  : "The buyer accepted the quotation, so the transaction has moved out of the quotation stage. Payment is still awaiting confirmation."}
+                            </p>
+                          </>
+                        );
+                      })()}
 
                       <div className="grid grid-cols-2 gap-2 mt-3">
                         <div className="rounded-lg bg-white border border-[#DDEADF] p-2">
@@ -845,7 +866,9 @@ export default function QuotationCenter({
                             Deal status
                           </p>
                           <p className="text-xs font-semibold text-[#374151] mt-1">
-                            Payment Coordination
+                            {String(selected.deal?.status || selected.status || "payment_coordination") === "completed"
+                              ? "Completed"
+                              : "Payment Coordination"}
                           </p>
                         </div>
 
@@ -854,7 +877,10 @@ export default function QuotationCenter({
                             Payment
                           </p>
                           <p className="text-xs font-semibold text-[#374151] mt-1">
-                            Pending
+                            {String(selected.deal?.status || selected.status || "").toLowerCase() === "completed" ||
+                            String(selected.deal?.paymentStatus || "").toLowerCase() === "received"
+                              ? "Received"
+                              : "Pending"}
                           </p>
                         </div>
 

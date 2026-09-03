@@ -11,12 +11,13 @@ router.get("/profile", protect, (req, res) => {
 
 router.patch("/profile", protect, async (req, res) => {
   try {
-    const { name, phone } = req.body || {};
+    const { name, phone, company } = req.body || {};
     if (!name?.trim() || !phone?.trim()) return res.status(400).json({ success: false, message: "Name and phone number are required" });
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
     user.name = name.trim();
     user.phone = phone.trim();
+    if (company !== undefined) user.company = String(company).trim();
     await user.save();
     return res.status(200).json({ success: true, message: "Profile updated successfully", user });
   } catch (error) {

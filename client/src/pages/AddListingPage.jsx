@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { INDIAN_LOCATIONS } from "../constants/indianStates.js";
 
 import { CREDIT_TYPES } from "../data/mock";
 import { Button, Input, Select, Textarea, Badge } from "../components/ui";
@@ -26,18 +27,6 @@ function AddListingPage({ onNavigate }) {
     certificateIssuedDate: "",
     certificateValidTill: "",
   });
-  const states = [
-    "Delhi",
-    "Gujarat",
-    "Maharashtra",
-    "Tamil Nadu",
-    "Rajasthan",
-    "Karnataka",
-    "Haryana",
-    "Uttar Pradesh",
-    "Punjab",
-    "West Bengal",
-  ];
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
 
@@ -132,32 +121,26 @@ function AddListingPage({ onNavigate }) {
       return;
     }
 
-    if (!form.certificateIssuedDate || !form.certificateValidTill) {
-      alert("Please enter both certificate issue and validity dates.");
+    if (!form.certificateIssuedDate || !form.validTill) {
+      alert("Please enter the certificate issue date and valid till date.");
       setStep(1);
       return;
     }
 
-    if (new Date(form.certificateIssuedDate) > new Date(form.certificateValidTill)) {
+    if (new Date(form.certificateIssuedDate) > new Date(form.validTill)) {
       alert("Certificate issue date cannot be after its validity date.");
       setStep(1);
       return;
     }
 
-    if (new Date(form.certificateValidTill) < new Date()) {
-      alert("Certificate validity date must be in the future.");
-      setStep(1);
+    if (new Date(form.validTill) < new Date()) {
+      alert("Valid till date must be in the future.");
+      setStep(0);
       return;
     }
 
     if (Number(form.certificateQuantity) < Number(form.quantity)) {
       alert("Certificate quantity must cover the quantity you are listing.");
-      setStep(1);
-      return;
-    }
-
-    if (new Date(form.certificateValidTill) < new Date(form.validTill)) {
-      alert("Listing validity cannot extend beyond the certificate validity.");
       setStep(1);
       return;
     }
@@ -182,7 +165,7 @@ function AddListingPage({ onNavigate }) {
       formData.append("sourcePortal", form.sourcePortal);
       formData.append("certificateQuantity", form.certificateQuantity);
       formData.append("certificateIssuedDate", form.certificateIssuedDate);
-      formData.append("certificateValidTill", form.certificateValidTill);
+      formData.append("certificateValidTill", form.validTill);
       formData.append("document", uploadedFile);
 
       console.log("FORM DATA:");
@@ -396,7 +379,7 @@ function AddListingPage({ onNavigate }) {
               </div>
               <Select
                 label="Location (State) *"
-                options={states.map((s) => ({ label: s, value: s }))}
+                options={INDIAN_LOCATIONS.map((s) => ({ label: s, value: s }))}
                 placeholder="Select state"
                 value={form.location}
                 onChange={(e) =>
@@ -417,10 +400,15 @@ function AddListingPage({ onNavigate }) {
                 />
                 <Input
                   label="Valid Till *"
-                  placeholder="e.g. 31 Mar 2026"
+                  type="date"
+                  lang="en-GB"
                   value={form.validTill}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, validTill: e.target.value }))
+                    setForm((f) => ({
+                      ...f,
+                      validTill: e.target.value,
+                      certificateValidTill: e.target.value,
+                    }))
                   }
                 />
               </div>
@@ -498,14 +486,7 @@ function AddListingPage({ onNavigate }) {
                   setForm((f) => ({ ...f, certificateIssuedDate: e.target.value }))
                 }
               />
-              <Input
-                label="Certificate Valid Till *"
-                type="date"
-                value={form.certificateValidTill}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, certificateValidTill: e.target.value }))
-                }
-              />
+
             </div>
 
             {/* Upload zone */}
@@ -660,7 +641,6 @@ function AddListingPage({ onNavigate }) {
                     label: "Certificate Quantity",
                     value: form.certificateQuantity ? `${form.certificateQuantity} MT` : "Not set",
                   },
-                  { label: "Certificate Valid Till", value: form.certificateValidTill || "Not set" },
                 ].map((row) => (
                   <div key={row.label} className="flex flex-col gap-0.5">
                     <span className="text-xs text-[#9CA3AF]">{row.label}</span>

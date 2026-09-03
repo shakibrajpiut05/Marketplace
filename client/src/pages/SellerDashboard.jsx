@@ -1,6 +1,6 @@
 import api from "../services/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import { NotificationBell, ProfileMenu } from "../components/AccountTools.jsx";
+import { NotificationBell, ProfileMenu, ProfileSection } from "../components/AccountTools.jsx";
 import {
   Badge,
   Button,
@@ -242,7 +242,7 @@ const NAV = [
 function SellerDashboard({ onNavigate }) {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const validSections = useMemo(() => new Set(["dashboard", "listings", "requests", "deals", "messages", "profile"]), []);
+  const validSections = useMemo(() => new Set(["dashboard", "listings", "requests", "deals", "disputes", "messages", "documents", "profile"]), []);
   const initialSection = validSections.has(searchParams.get("section")) ? searchParams.get("section") : "dashboard";
   const [active, setActive] = useState(initialSection);
   const validDealTabs = useMemo(() => new Set(["overview", "messages", "quotation", "payment", "dispute", "review"]), []);
@@ -434,20 +434,27 @@ function SellerDashboard({ onNavigate }) {
   );
 
   const inventorySummary = useMemo(() => {
-    const total = sellerListings.reduce(
+    // Only admin-approved (active) listings are inventory. Pending/rejected
+    // submissions remain visible in My Listings for transparency, but their
+    // quantity must never appear as available inventory.
+    const activeListings = sellerListings.filter(
+      (listing) => listing.status === "active",
+    );
+
+    const total = activeListings.reduce(
       (sum, listing) =>
         sum + Number(listing.totalQuantity ?? listing.quantity ?? 0),
       0,
     );
-    const available = sellerListings.reduce(
+    const available = activeListings.reduce(
       (sum, listing) => sum + Number(listing.quantity || 0),
       0,
     );
-    const reserved = sellerListings.reduce(
+    const reserved = activeListings.reduce(
       (sum, listing) => sum + Number(listing.reservedQuantity || 0),
       0,
     );
-    const sold = sellerListings.reduce((sum, listing) => {
+    const sold = activeListings.reduce((sum, listing) => {
       const listingTotal = Number(
         listing.totalQuantity ?? listing.quantity ?? 0,
       );
@@ -863,9 +870,11 @@ function SellerDashboard({ onNavigate }) {
                             </span>
                           </Td>
                           <Td>
-                            {Number(listing.quantity || 0).toLocaleString(
-                              "en-IN",
-                            )}{" "}
+                            {listing.status === "active"
+                              ? Number(listing.quantity || 0).toLocaleString(
+                                  "en-IN",
+                                )
+                              : "0"}{" "}
                             MT
                           </Td>
                           <Td>
@@ -1158,24 +1167,7 @@ function SellerDashboard({ onNavigate }) {
             </Card>
           )}
 
-          {active === "profile" && (
-            <Card>
-              <div className="px-5 py-4 border-b border-[#E5EAF0]">
-                <h2 className="font-semibold text-[#0F1923]">Profile</h2>
-                <p className="text-xs text-[#9CA3AF] mt-1">
-                  Manage your seller account from the profile menu.
-                </p>
-              </div>
-              <div className="p-5">
-                <div className="rounded-xl border border-[#E5EAF0] bg-[#F7F9FB] p-4">
-                  <p className="text-sm text-[#6B7280]">
-                    Use the profile menu in the top navigation to view your
-                    account details and verification status.
-                  </p>
-                </div>
-              </div>
-            </Card>
-          )}
+          {active === "profile" && <ProfileSection onNavigate={onNavigate} />}
         </div>
       </main>
     </div>

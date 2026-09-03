@@ -106,7 +106,10 @@ function CompactDealCard({ deal, role, openDealId, openDealTab, onOpenDealRoom, 
             role={role}
             controlledOpen={String(openDealId || "") === String(deal._id)}
             initialTab={String(openDealId || "") === String(deal._id) ? openDealTab : "overview"}
-            onOpen={() => onOpenDealRoom?.(deal)}
+            onOpen={() => {
+              const paymentStage = role === "buyer" && ["terms_agreed", "payment_coordination"].includes(deal.status);
+              onOpenDealRoom?.(deal, paymentStage ? "payment" : "overview");
+            }}
             onClose={onCloseDealRoom}
             onTabChange={onDealRoomTabChange}
           />

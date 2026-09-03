@@ -43,6 +43,33 @@ const paymentSchema = new mongoose.Schema(
       maxlength: 2000,
       default: "",
     },
+    proofFileName: {
+      type: String,
+      trim: true,
+      maxlength: 255,
+      default: "",
+    },
+    proofFileUrl: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: "",
+    },
+    proofMimeType: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: "",
+    },
+    proofFileSize: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    proofSubmittedAt: {
+      type: Date,
+      default: null,
+    },
     initiatedAt: {
       type: Date,
       default: null,

@@ -27,7 +27,9 @@ export const authRateLimiter = rateLimit({
   limit: 10,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  skipSuccessfulRequests: false,
+  // Successful logins should not consume the failed-attempt budget.
+  // This prevents normal SPA login/session flows from locking the user out.
+  skipSuccessfulRequests: true,
   handler: jsonHandler(
     "Too many authentication attempts. Please try again later.",
     "AUTH_RATE_LIMITED",

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../services/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import { Card, Button } from "./ui.jsx";
 
 const formatTime = (value) => {
   if (!value) return "";
@@ -168,19 +169,14 @@ export function AdminProfileMenu({ onNavigate, compact = false }) {
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((value) => !value)} className="px-2 py-1.5 rounded-lg hover:bg-[#F7F9FB] flex items-center gap-2">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-label="Account menu" className={`${compact ? "px-2" : "px-2.5"} py-1.5 rounded-lg hover:bg-[#F7F9FB] flex items-center gap-2`}>
         <span className="w-8 h-8 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center text-xs font-bold">{(user?.name || "A").slice(0, 1).toUpperCase()}</span>
         <span className="hidden sm:block text-sm font-semibold text-[#374151] max-w-28 truncate">{user?.name || "Admin"}</span>
         <svg className="w-4 h-4 text-[#9CA3AF]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" /></svg>
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-[280px] max-w-[calc(100vw-1rem)] bg-white border border-[#E5EAF0] rounded-xl shadow-xl z-[90] overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#E5EAF0] bg-[#F8FAFC]"><p className="font-semibold text-sm text-[#0F1923]">{user?.name || "Admin"}</p><p className="text-xs text-[#6B7280]">Administrator</p></div>
-          <div className="p-3 space-y-2.5">
-            <div><p className="text-[10px] uppercase tracking-wide font-semibold text-[#9CA3AF]">Email</p><p className="text-sm text-[#374151] break-all mt-1">{user?.email || "—"}</p></div>
-            <div className="rounded-lg bg-[#F0FBF1] border border-[#CFE8D1] px-3 py-2"><p className="text-xs font-semibold text-[#2E7D32]">Platform admin</p><p className="text-[11px] text-[#52715A] mt-0.5">No customer verification is required.</p></div>
-            <button type="button" onClick={handleLogout} className="w-full py-2 bg-[#FEF2F2] text-[#991B1B] rounded-lg text-sm font-semibold">Logout</button>
-          </div>
+        <div className="absolute right-0 mt-2 w-44 bg-white border border-[#E5EAF0] rounded-xl shadow-xl z-[90] overflow-hidden p-2">
+          <button type="button" onClick={handleLogout} className="w-full py-2.5 text-[#991B1B] bg-[#FEF2F2] hover:bg-[#FEE2E2] rounded-lg text-sm font-semibold">Logout</button>
         </div>
       )}
     </div>
@@ -188,68 +184,169 @@ export function AdminProfileMenu({ onNavigate, compact = false }) {
 }
 
 export function ProfileMenu({ onNavigate, compact = false }) {
-  const { user, refreshUser, updateProfile, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(user?.name || "");
-  const [phone, setPhone] = useState(user?.phone || "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const ref = useRef(null);
 
-  useEffect(() => { setName(user?.name || ""); setPhone(user?.phone || ""); }, [user?.name, user?.phone]);
-  useEffect(() => { const handleOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) setOpen(false); }; document.addEventListener("mousedown", handleOutside); return () => document.removeEventListener("mousedown", handleOutside); }, []);
+  useEffect(() => {
+    const handleOutside = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
 
-  // Admin accounts use the dedicated admin profile menu.
-  // Keep all hooks above this branch so React hook order never changes.
-  if (user?.role === "admin") {
-    return <AdminProfileMenu onNavigate={onNavigate} compact={compact} />;
-  }
-
-  const save = async () => {
-    try { setSaving(true); setError(""); await updateProfile({ name: name.trim(), phone: phone.trim() }); setEditing(false); }
-    catch (requestError) { setError(requestError.response?.data?.message || requestError.message || "Failed to update profile."); }
-    finally { setSaving(false); }
+  const handleLogout = () => {
+    logout();
+    setOpen(false);
+    onNavigate?.("home");
   };
-
-  const status = user?.role === "admin"
-    ? { label: "Admin account", tone: "green", detail: "Admin accounts are provisioned and verified by the platform." }
-    : !user?.emailVerified
-      ? { label: "Email verification pending", tone: "yellow", detail: "Verify your email before using marketplace services." }
-      : user?.kycStatus === "approved"
-        ? { label: "Profile verified", tone: "green", detail: "You can use all marketplace services." }
-        : user?.kycStatus === "rejected"
-          ? { label: "Verification rejected", tone: "red", detail: user?.kycRejectionReason || "Please re-upload your verification documents." }
-          : user?.kycSubmittedAt
-            ? { label: "Under verification", tone: "yellow", detail: "Your business verification is waiting for admin approval." }
-            : { label: "Not verified", tone: "yellow", detail: "You cannot use marketplace trading services until your business is verified." };
-
-  const toneClasses = { green: "bg-[#EBF8EC] border-[#A5D6A7] text-[#2E7D32]", yellow: "bg-[#FFFBEB] border-[#FCD34D] text-[#92400E]", red: "bg-[#FEF2F2] border-[#FECACA] text-[#991B1B]" };
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => { setOpen((value) => !value); if (!open) refreshUser(); }} className={`${compact ? "px-2" : "px-2.5"} py-1.5 rounded-lg hover:bg-[#F7F9FB] transition-colors flex items-center gap-2 max-w-52`}>
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-label="Account menu" className={`${compact ? "px-2" : "px-2.5"} py-1.5 rounded-lg hover:bg-[#F7F9FB] transition-colors flex items-center gap-2 max-w-52`}>
         <span className="w-7 h-7 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center text-xs font-bold">{(user?.name || "U").slice(0, 1).toUpperCase()}</span>
         <span className="hidden sm:block text-sm font-semibold text-[#374151] truncate">{user?.name || "User"}</span>
-        <svg className="w-4 h-4 text-[#9CA3AF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" /></svg>
+        <svg className="w-4 h-4 text-[#9CA3AF]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" /></svg>
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-[290px] max-w-[calc(100vw-1rem)] bg-white border border-[#E5EAF0] rounded-xl shadow-xl z-[80] overflow-hidden">
-          <div className="px-4 py-3 bg-[#F8FAFC] border-b border-[#E5EAF0]"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-[#EBF8EC] text-[#2E7D32] flex items-center justify-center font-bold">{(user?.name || "U").slice(0, 1).toUpperCase()}</div><div className="min-w-0"><p className="font-semibold text-[#0F1923] truncate">{user?.name || "User"}</p><p className="text-xs text-[#6B7280] capitalize">{user?.role || "user"} account</p></div></div></div>
-          <div className="p-3.5 space-y-3">
-            {error && <div className="text-xs text-[#991B1B] bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-2.5">{error}</div>}
-            <div className="space-y-2.5">
-              <label className="block"><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Name</span><input value={name} onChange={(event) => setName(event.target.value)} disabled={!editing} className="mt-1 w-full rounded-lg border border-[#E5EAF0] px-3 py-1.5 text-sm outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC]" /></label>
-              <label className="block"><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Phone</span><input value={phone} onChange={(event) => setPhone(event.target.value)} disabled={!editing} className="mt-1 w-full rounded-lg border border-[#E5EAF0] px-3 py-1.5 text-sm outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC]" /></label>
-              <div><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Company</span><div className="mt-1 w-full rounded-lg border border-[#E5EAF0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#6B7280] break-all">{user?.company || "—"}</div><p className="text-[10px] text-[#9CA3AF] mt-1">Company name is managed from your registered business profile.</p></div>
-              <div><span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Email</span><div className="mt-1 w-full rounded-lg border border-[#E5EAF0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#6B7280] break-all">{user?.email || "—"}</div><p className="text-[10px] text-[#9CA3AF] mt-1">Email cannot be changed from your profile.</p></div>
-            </div>
-            <div className={`rounded-lg border px-3 py-2.5 ${toneClasses[status.tone]}`}><p className="text-sm font-semibold">{status.label}</p><p className="text-xs mt-1 leading-relaxed">{status.detail}</p>{user?.role !== "admin" && user?.kycStatus !== "approved" && <button type="button" onClick={() => { setOpen(false); onNavigate?.("verification"); }} className="mt-2 text-xs font-bold underline">{user?.kycStatus === "rejected" ? "Re-upload documents" : user?.kycSubmittedAt ? "View verification status" : "Upload documents to verify"}</button>}</div>
-            {editing ? <div className="flex gap-2"><button type="button" onClick={() => { setEditing(false); setError(""); }} className="flex-1 py-2 border border-[#E5EAF0] rounded-lg text-sm">Cancel</button><button type="button" onClick={save} disabled={saving || !name.trim() || !phone.trim()} className="flex-1 py-2 bg-[#5AC361] text-white rounded-lg text-sm font-semibold disabled:opacity-50">{saving ? "Saving..." : "Save changes"}</button></div> : <button type="button" onClick={() => setEditing(true)} className="w-full py-1.5 border border-[#E5EAF0] rounded-lg text-sm font-semibold text-[#374151] hover:bg-[#F7F9FB]">Edit profile</button>}
-            <button type="button" onClick={() => { logout(); setOpen(false); onNavigate?.("home"); }} className="w-full py-1.5 text-[#991B1B] bg-[#FEF2F2] rounded-lg text-sm font-semibold">Logout</button>
-          </div>
+        <div className="absolute right-0 mt-2 w-44 bg-white border border-[#E5EAF0] rounded-xl shadow-xl z-[80] overflow-hidden p-2">
+          <button type="button" onClick={handleLogout} className="w-full py-2.5 text-[#991B1B] bg-[#FEF2F2] hover:bg-[#FEE2E2] rounded-lg text-sm font-semibold">Logout</button>
         </div>
       )}
     </div>
   );
 }
+
+const getVerificationStatus = (user) => {
+  if (!user?.emailVerified) {
+    return { label: "Email verification pending", detail: "Your email address has not been verified yet.", tone: "yellow" };
+  }
+  return { label: "Email verified", detail: "Your email address is verified.", tone: "green" };
+};
+
+const getDocumentStatus = (user) => {
+  const status = String(user?.kycStatus || "").toLowerCase();
+  if (status === "approved") return { label: "Documents verified", detail: "Your business verification documents have been approved.", tone: "green" };
+  if (status === "rejected") return { label: "Documents rejected", detail: user?.kycRejectionReason || "Your verification documents need to be submitted again.", tone: "red" };
+  if (user?.kycSubmittedAt || status === "pending" || status === "submitted") return { label: "Documents under review", detail: "Your verification documents are waiting for admin review.", tone: "yellow" };
+  return { label: "Documents not verified", detail: "Submit your verification documents to activate marketplace trading.", tone: "yellow" };
+};
+
+const profileTone = {
+  green: "border-[#A5D6A7] bg-[#EBF8EC] text-[#2E7D32]",
+  yellow: "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]",
+  red: "border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]",
+};
+
+export function ProfileSection({ onNavigate }) {
+  const { user, refreshUser, updateProfile } = useAuth();
+  const [name, setName] = useState(user?.name || "");
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [company, setCompany] = useState(user?.company || "");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setName(user?.name || "");
+    setPhone(user?.phone || "");
+    setCompany(user?.company || "");
+  }, [user?.name, user?.phone, user?.company]);
+
+  useEffect(() => {
+    refreshUser().catch(() => {});
+  }, []);
+
+  const emailStatus = getVerificationStatus(user);
+  const documentStatus = getDocumentStatus(user);
+
+  const save = async () => {
+    const nextName = name.trim();
+    const nextPhone = phone.trim();
+    const nextCompany = company.trim();
+    if (!nextName || !nextPhone) return;
+    try {
+      setSaving(true);
+      setError("");
+      await updateProfile({ name: nextName, phone: nextPhone, company: nextCompany });
+      setEditing(false);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || requestError.message || "Failed to update profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Account</p>
+        <h2 className="mt-1 font-heading text-xl font-semibold text-[#101828]">Profile</h2>
+        <p className="mt-1 text-sm text-[#667085]">View and update your account details and verification status. Email and security status remain protected.</p>
+      </div>
+
+      {error && <div className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#991B1B]">{error}</div>}
+
+      <Card className="overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-[#EAECF0] bg-[#FCFCFD] px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EBF8EC] text-lg font-bold text-[#2E7D32]">{(user?.name || "U").slice(0, 1).toUpperCase()}</div>
+            <div>
+              <p className="text-base font-semibold text-[#101828]">{user?.name || "User"}</p>
+              <p className="mt-0.5 text-xs capitalize text-[#667085]">{user?.role || "user"} account</p>
+            </div>
+          </div>
+          {!editing && <Button size="sm" variant="outline" onClick={() => { setError(""); setEditing(true); }}>Edit profile</Button>}
+        </div>
+
+        <div className="grid gap-4 p-5 md:grid-cols-2">
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#98A2B3]">Name</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} disabled={!editing} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-white px-3.5 py-2.5 text-sm text-[#344054] outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC] disabled:text-[#475467]" />
+            <span className="mt-1 block text-[11px] text-[#98A2B3]">Name, phone and company can be updated. Email changes require a separate verified email-change flow.</span>
+          </label>
+
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#98A2B3]">Phone</span>
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} disabled={!editing} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-white px-3.5 py-2.5 text-sm text-[#344054] outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC] disabled:text-[#475467]" />
+          </label>
+
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#98A2B3]">Email</span>
+            <div className="mt-1.5 break-all rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] px-3.5 py-2.5 text-sm text-[#475467]">{user?.email || "—"}</div>
+          </div>
+
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#98A2B3]">Company</span>
+            <input value={company} onChange={(event) => setCompany(event.target.value)} disabled={!editing} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-white px-3.5 py-2.5 text-sm text-[#344054] outline-none focus:border-[#5AC361] disabled:bg-[#F8FAFC] disabled:text-[#475467]" />
+          </label>
+
+          {editing && <div className="md:col-span-2 flex gap-2 border-t border-[#EAECF0] pt-4">
+            <Button size="sm" variant="outline" onClick={() => { setName(user?.name || ""); setPhone(user?.phone || ""); setCompany(user?.company || ""); setEditing(false); setError(""); }}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving || !name.trim() || !phone.trim()}>{saving ? "Saving..." : "Save changes"}</Button>
+          </div>}
+        </div>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className={`border ${profileTone[emailStatus.tone]}`}>
+          <div className="flex items-start gap-3 p-5">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/70 text-sm font-bold">{emailStatus.tone === "green" ? "✓" : "!"}</div>
+            <div><p className="text-sm font-semibold">{emailStatus.label}</p><p className="mt-1 text-xs leading-relaxed opacity-80">{emailStatus.detail}</p></div>
+          </div>
+        </Card>
+
+        <Card className={`border ${profileTone[documentStatus.tone]}`}>
+          <div className="flex items-start gap-3 p-5">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/70 text-sm font-bold">{documentStatus.tone === "green" ? "✓" : "!"}</div>
+            <div className="min-w-0"><p className="text-sm font-semibold">{documentStatus.label}</p><p className="mt-1 text-xs leading-relaxed opacity-80">{documentStatus.detail}</p>
+              {documentStatus.tone !== "green" && onNavigate && <button type="button" onClick={() => onNavigate("verification")} className="mt-2 text-xs font-bold underline">{documentStatus.tone === "red" ? "Open verification" : "Open verification"} →</button>}
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+

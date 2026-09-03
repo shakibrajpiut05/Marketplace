@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import SellerListing from "../models/SellerListing.js";
 import Document from "../models/Document.js";
 import { createActivityLog } from "../services/activityLog.service.js";
+import { createNotifications } from "../services/notification.service.js";
 import { notifyMatchesForListing } from "../services/matching.service.js";
 
 /*
@@ -640,6 +641,31 @@ await createActivityLog({
     price: listing.price,
     location: listing.location,
     complianceYear: listing.complianceYear,
+  },
+});
+
+// Tell the seller immediately when an admin approves or rejects their listing.
+// Notification failures are intentionally non-blocking inside createNotifications.
+await createNotifications({
+  recipients: [listing.sellerId],
+  actor: req.user._id,
+  type: status === "active" ? "listing_approved" : "listing_rejected",
+  title:
+    status === "active"
+      ? "Listing approved"
+      : "Listing rejected",
+  message:
+    status === "active"
+      ? `${listing.category} listing (${Number(listing.quantity || 0).toLocaleString("en-IN")} MT) has been approved and is now live in the marketplace.`
+      : `${listing.category} listing (${Number(listing.quantity || 0).toLocaleString("en-IN")} MT) was rejected. Reason: ${listing.rejectionReason || "No reason provided."}`,
+  entityType: "listing",
+  entityId: listing._id,
+  metadata: {
+    status: listing.status,
+    rejectionReason: listing.rejectionReason || "",
+    category: listing.category,
+    quantity: listing.quantity,
+    price: listing.price,
   },
 });
 

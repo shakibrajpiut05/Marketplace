@@ -720,10 +720,17 @@ const deals = await Deal.find()
 createdAt: -1,
 });
 
+const payments = await Payment.find({ dealId: { $in: deals.map((deal) => deal._id) } }).lean();
+const paymentByDeal = new Map(payments.map((payment) => [String(payment.dealId), payment]));
+const dealsWithPayment = deals.map((deal) => {
+  const value = deal.toObject ? deal.toObject() : deal;
+  return { ...value, payment: paymentByDeal.get(String(deal._id)) || null };
+});
+
 return res.status(200).json({
   success: true,
-  count: deals.length,
-  deals,
+  count: dealsWithPayment.length,
+  deals: dealsWithPayment,
 });
 
 } catch (error) {
@@ -1139,7 +1146,12 @@ export const updateDealStatus = async (req, res) => {
 
     deal.status = status;
 
-    if (paymentStatus !== undefined) {
+    if (status === "completed") {
+      // A completed deal is only valid after payment has been received.
+      // Keep the persisted deal state consistent even when older/admin
+      // clients omit paymentStatus from the completion request.
+      deal.paymentStatus = "received";
+    } else if (paymentStatus !== undefined) {
       deal.paymentStatus = paymentStatus;
     }
 
@@ -1163,7 +1175,7 @@ export const updateDealStatus = async (req, res) => {
       },
       after: {
         status: deal.status,
-        paymentStatus: deal.paymentStatus,
+        paymentStatus: deal.status === "completed" ? "received" : deal.paymentStatus,
       },
       metadata: {
         quantity: deal.quantity,
@@ -1234,7 +1246,7 @@ export const updateDealStatus = async (req, res) => {
     await notifyDealStatusChange({
       deal,
       status: deal.status,
-      paymentStatus: deal.paymentStatus,
+      paymentStatus: deal.status === "completed" ? "received" : deal.paymentStatus,
       actor: req.user?._id || null,
     });
 
@@ -1323,7 +1335,7 @@ const sellerDeals = deals.map((deal) => ({
 
   status: deal.status,
 
-  paymentStatus: deal.paymentStatus,
+  paymentStatus: deal.status === "completed" ? "received" : deal.paymentStatus,
 
   inventoryReserved: Boolean(deal.inventoryReserved),
 
@@ -1435,7 +1447,7 @@ const buyerDeals = deals.map((deal) => ({
 
   status: deal.status,
 
-  paymentStatus: deal.paymentStatus,
+  paymentStatus: deal.status === "completed" ? "received" : deal.paymentStatus,
 
   inventoryReserved: Boolean(deal.inventoryReserved),
 

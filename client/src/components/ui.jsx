@@ -475,7 +475,7 @@ function DashboardShell({
       className={`min-h-screen flex ${dark ? "bg-[#F7F9FB]" : "bg-[#F7F9FB]"}`}
     >
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col border-r shadow-[8px_0_24px_rgba(15,25,35,0.04)] transition-transform duration-200 md:relative md:translate-x-0 md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col border-r shadow-[8px_0_24px_rgba(15,25,35,0.04)] transition-transform duration-200 md:translate-x-0 md:shadow-none ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } ${sidebarClasses}`}
         aria-label={`${roleLabel || "Application"} navigation`}
@@ -626,7 +626,7 @@ function DashboardShell({
         />
       )}
 
-      <main className="min-w-0 flex-1">
+      <main className="min-w-0 flex-1 md:ml-[272px]">
         <header className="sticky top-0 z-20 flex min-h-[72px] items-center justify-between gap-3 border-b border-[#E5EAF0] bg-white/95 px-4 backdrop-blur-md sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button

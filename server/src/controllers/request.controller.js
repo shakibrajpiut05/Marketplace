@@ -198,10 +198,33 @@ export const getAdminPurchaseRequests = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    // Include the current deal state so admin quotation views cannot show a
+    // stale payment status after a deal has moved to completion.
+    const requestIds = requests.map((request) => request._id);
+    const deals = requestIds.length
+      ? await Deal.find({ requestId: { $in: requestIds } })
+          .select("_id requestId status paymentStatus completedAt createdAt")
+          .sort({ createdAt: -1 })
+          .lean()
+      : [];
+
+    const dealByRequestId = new Map();
+    for (const deal of deals) {
+      const key = String(deal.requestId);
+      if (!dealByRequestId.has(key)) {
+        dealByRequestId.set(key, deal);
+      }
+    }
+
+    const requestsWithDeal = requests.map((request) => ({
+      ...request,
+      deal: dealByRequestId.get(String(request._id)) || null,
+    }));
+
     return res.status(200).json({
       success: true,
-      count: requests.length,
-      requests,
+      count: requestsWithDeal.length,
+      requests: requestsWithDeal,
     });
   } catch (error) {
     console.error("Get admin purchase requests error:", error);

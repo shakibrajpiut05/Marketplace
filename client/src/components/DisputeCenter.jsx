@@ -135,6 +135,7 @@ function DisputeDetails({ dispute, role, onUpdated }) {
   const [message, setMessage] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
   const [responding, setResponding] = useState(false);
+  const [downloadingId, setDownloadingId] = useState("");
   const [error, setError] = useState("");
 
   const waitingForMe =
@@ -145,6 +146,31 @@ function DisputeDetails({ dispute, role, onUpdated }) {
     !["resolved", "rejected"].includes(dispute.status) &&
     (waitingForMe ||
       ["open", "under_review", "escalated"].includes(dispute.status));
+
+  const downloadEvidence = async (document) => {
+    const documentId = document?._id;
+    if (!documentId || !dispute?._id) return;
+    try {
+      setDownloadingId(String(documentId));
+      setError("");
+      const response = await api.get(
+        `/disputes/${dispute._id}/evidence/${documentId}/download`,
+        { responseType: "blob" },
+      );
+      const blobUrl = URL.createObjectURL(response.data);
+      const anchor = window.document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = document.fileName || "evidence-document";
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to open the evidence document.");
+    } finally {
+      setDownloadingId("");
+    }
+  };
 
   const respond = async () => {
     if (message.trim().length < 10) {
@@ -253,9 +279,19 @@ function DisputeDetails({ dispute, role, onUpdated }) {
                   {entry.note || "Evidence attached"}
                 </p>
                 {entry.documentId?.fileName ? (
-                  <p className="mt-2 text-xs font-medium text-[#2E7D32]">
-                    Document: {entry.documentId.fileName}
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-medium text-[#2E7D32]">
+                      Document: {entry.documentId.fileName}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => downloadEvidence(entry.documentId)}
+                      disabled={downloadingId === String(entry.documentId._id)}
+                    >
+                      {downloadingId === String(entry.documentId._id) ? "Opening…" : "Open document"}
+                    </Button>
+                  </div>
                 ) : null}
               </div>
             ))

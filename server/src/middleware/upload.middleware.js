@@ -2,8 +2,12 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { fileURLToPath } from "url";
 
-const uploadDirectory = path.resolve("uploads/documents");
+// Keep uploaded KYC files beside the server code, independent of process.cwd().
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDirectory = path.resolve(__dirname, "../../uploads/documents");
 
 if (!fs.existsSync(uploadDirectory)) {
   fs.mkdirSync(uploadDirectory, { recursive: true });

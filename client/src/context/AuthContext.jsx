@@ -206,8 +206,8 @@ export const AuthProvider = ({ children }) => {
 
   const refreshUser = async () => restoreUser();
 
-  const updateProfile = async ({ name, phone }) => {
-    const response = await api.patch("/users/profile", { name, phone });
+  const updateProfile = async ({ name, phone, company }) => {
+    const response = await api.patch("/users/profile", { name, phone, company });
     if (response.data.success) setUser(response.data.user);
     return response.data;
   };

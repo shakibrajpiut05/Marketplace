@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { CREDIT_TYPES } from "../data/mock";
 import api from "../services/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import { NotificationBell, ProfileMenu } from "../components/AccountTools.jsx";
+import { NotificationBell, ProfileMenu, ProfileSection } from "../components/AccountTools.jsx";
+import { INDIAN_LOCATIONS } from "../constants/indianStates.js";
 import {
   Badge,
   DashboardShell,
@@ -430,15 +431,6 @@ function PostRequirementModal({ onClose, onCreated }) {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const states = [
-    "Any Location",
-    "Delhi",
-    "Gujarat",
-    "Maharashtra",
-    "Tamil Nadu",
-    "Rajasthan",
-    "Karnataka",
-  ];
   if (done) {
     return (
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -532,7 +524,7 @@ function PostRequirementModal({ onClose, onCreated }) {
           </div>
           <Select
             label="Location Preference"
-            options={states.map((s) => ({ label: s, value: s }))}
+            options={[{ label: "Any Location", value: "" }, ...INDIAN_LOCATIONS.map((s) => ({ label: s, value: s }))]}
             value={form.location}
             onChange={(e) =>
               setForm((f) => ({ ...f, location: e.target.value }))
@@ -1190,7 +1182,7 @@ function BuyerDashboard({ onNavigate }) {
                   active transactions moving.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              {/* <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -1201,7 +1193,7 @@ function BuyerDashboard({ onNavigate }) {
                 <Button size="sm" onClick={() => setShowPostModal(true)}>
                   + Post Requirement
                 </Button>
-              </div>
+              </div> */}
             </div>
 
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
@@ -2143,8 +2135,11 @@ function BuyerDashboard({ onNavigate }) {
                                   size="sm"
                                   onClick={async () => {
                                     try {
-                                      await api.post(`/requests/${request._id}/offer/accept`);
+                                      const response = await api.post(`/requests/${request._id}/offer/accept`);
                                       await fetchBuyerData();
+                                      if (response.data?.deal?._id) {
+                                        openDealRoom(response.data.deal, "overview");
+                                      }
                                     } catch (error) {
                                       alert(error.response?.data?.message || "Unable to accept this quotation.");
                                     }
@@ -2230,8 +2225,8 @@ function BuyerDashboard({ onNavigate }) {
                 </Button>
               </div>
             ) : watchlist.length === 0 ? (
-              <div className="px-5 py-14 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#F8FAFC] text-[#98A2B3]">
+              <div className="flex flex-col items-center justify-center text-center py-12 px-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-3 text-[#344054]">
                   <svg
                     className="h-6 w-6"
                     fill="none"
@@ -2242,13 +2237,12 @@ function BuyerDashboard({ onNavigate }) {
                     <path d="M6 4.75A2.75 2.75 0 018.75 2h6.5A2.75 2.75 0 0118 4.75V21l-6-3.5L6 21V4.75z" />
                   </svg>
                 </div>
-                <h3 className="mt-4 font-heading text-base font-semibold text-[#344054]">
+                <h3 className="text-base font-semibold text-slate-900">
                   Your watchlist is empty
                 </h3>
-                <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-[#667085]">
-                  Save credits from the marketplace when you find listings you
-                  want to compare later.
-                </p>
+              <p className="mt-1 max-w-md text-sm leading-6 text-[#667085]">
+  Save credits from the marketplace when you find listings you want to compare later.
+</p>
                 <Button
                   className="mt-5"
                   onClick={() => onNavigate("marketplace")}
@@ -2437,22 +2431,7 @@ function BuyerDashboard({ onNavigate }) {
           </Card>
         )}
 
-        {active === "profile" && (
-          <Card>
-            <div className="px-5 py-4 border-b border-[#E5EAF0]">
-              <h2 className="font-semibold text-[#0F1923]">Profile</h2>
-              <p className="text-xs text-[#9CA3AF] mt-1">
-                Manage your account details and verification status.
-              </p>
-            </div>
-            <div className="p-5">
-              <p className="text-sm text-[#6B7280]">
-                Use the profile menu in the top navigation to view or edit your
-                account details, verification status, and logout.
-              </p>
-            </div>
-          </Card>
-        )}
+        {active === "profile" && <ProfileSection onNavigate={onNavigate} />}
       </DashboardShell>
     </>
   );

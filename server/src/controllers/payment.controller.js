@@ -1,12 +1,19 @@
 import mongoose from "mongoose";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import Deal from "../models/Deal.js";
 import Payment from "../models/Payment.js";
 import Invoice from "../models/Invoice.js";
+import User from "../models/User.js";
 import { createActivityLog } from "../services/activityLog.service.js";
 import { createNotifications } from "../services/notification.service.js";
 
 const ALLOWED_METHODS = new Set(["bank_transfer", "upi", "other"]);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PAYMENT_UPLOAD_ROOT = path.resolve(__dirname, "../../uploads/documents");
 const PAYMENT_TRANSITIONS = {
   pending: new Set(["pending", "initiated"]),
   initiated: new Set(["initiated", "received", "failed"]),
@@ -93,7 +100,24 @@ export const getPaymentForDeal = async (req, res) => {
       return res.status(404).json({ success: false, message: "Deal not found", code: "DEAL_NOT_FOUND" });
     }
 
-    const payment = await Payment.findOne({ dealId: adminDeal._id }).lean();
+    let payment = await Payment.findOne({ dealId: adminDeal._id }).lean();
+
+    // Completed deals are only valid after payment confirmation. Repair the
+    // payment record on read for older deals that were completed while the
+    // payment status remained stale.
+    if (adminDeal.status === "completed" && payment && payment.status !== "received") {
+      const repaired = await Payment.findByIdAndUpdate(
+        payment._id,
+        {
+          $set: {
+            status: "received",
+            receivedAt: payment.receivedAt || new Date(),
+          },
+        },
+        { new: true },
+      ).lean();
+      payment = repaired || payment;
+    }
 
     // The invoice belongs to the deal, not to the payment attempt.
     // Create it on first authorized view so buyers/sellers can review the
@@ -108,6 +132,20 @@ export const getPaymentForDeal = async (req, res) => {
       invoice = generatedInvoice?.toObject
         ? generatedInvoice.toObject()
         : generatedInvoice;
+    }
+
+    if (adminDeal.status === "completed" && invoice && invoice.status !== "paid") {
+      const paidInvoice = await Invoice.findByIdAndUpdate(
+        invoice._id,
+        {
+          $set: {
+            status: "paid",
+            paidAt: invoice.paidAt || new Date(),
+          },
+        },
+        { new: true },
+      ).lean();
+      invoice = paidInvoice || invoice;
     }
 
     return res.json({
@@ -136,6 +174,12 @@ export const initiatePayment = async (req, res) => {
     }
     if (!ALLOWED_METHODS.has(method)) {
       return res.status(400).json({ success: false, message: "Invalid payment method", code: "INVALID_PAYMENT_METHOD" });
+    }
+    if (!String(reference || "").trim()) {
+      return res.status(400).json({ success: false, message: "UTR / transaction reference is required", code: "PAYMENT_REFERENCE_REQUIRED" });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Payment screenshot is required", code: "PAYMENT_PROOF_REQUIRED" });
     }
 
     const deal = await Deal.findOne({ _id: dealId, buyerId: req.user._id });
@@ -171,6 +215,11 @@ export const initiatePayment = async (req, res) => {
             status: "initiated",
             reference: String(reference || "").trim(),
             notes: String(notes || "").trim(),
+            proofFileName: req.file.originalname || req.file.filename,
+            proofFileUrl: `/uploads/documents/${req.file.filename}`,
+            proofMimeType: req.file.mimetype || "",
+            proofFileSize: Number(req.file.size || 0),
+            proofSubmittedAt: now,
             initiatedAt: now,
             failedAt: null,
           },
@@ -182,7 +231,7 @@ export const initiatePayment = async (req, res) => {
       if (error?.code === 11000) {
         payment = await Payment.findOneAndUpdate(
           { dealId: deal._id },
-          { $set: { amount, method, status: "initiated", reference: String(reference || "").trim(), notes: String(notes || "").trim(), initiatedAt: now, failedAt: null } },
+          { $set: { amount, method, status: "initiated", reference: String(reference || "").trim(), notes: String(notes || "").trim(), proofFileName: req.file.originalname || req.file.filename, proofFileUrl: `/uploads/documents/${req.file.filename}`, proofMimeType: req.file.mimetype || "", proofFileSize: Number(req.file.size || 0), proofSubmittedAt: now, initiatedAt: now, failedAt: null } },
           { new: true },
         );
       } else throw error;
@@ -215,10 +264,63 @@ export const initiatePayment = async (req, res) => {
       metadata: { amount, method },
     });
 
-    return res.status(200).json({ success: true, message: "Payment initiated", payment, invoice, deal });
+    const admins = await User.find({ role: "admin", isActive: true }).select("_id").lean();
+    if (admins.length) {
+      await createNotifications({
+        recipients: admins.map((admin) => admin._id),
+        actor: req.user._id,
+        type: "payment_proof_submitted",
+        title: "Payment proof submitted",
+        message: `Buyer submitted ${method.replaceAll("_", " ")} payment proof for the ${deal.quantity} MT deal. Review the UTR and screenshot before confirming payment.`,
+        entityType: "deal",
+        entityId: deal._id,
+        metadata: { amount, method, reference: payment.reference, paymentId: payment._id },
+      });
+    }
+
+    return res.status(200).json({ success: true, message: "Payment proof submitted", payment, invoice, deal });
   } catch (error) {
     console.error("Initiate payment error:", error);
     return res.status(500).json({ success: false, message: "Failed to initiate payment", code: "PAYMENT_INITIATION_FAILED" });
+  }
+};
+
+export const downloadPaymentProof = async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(paymentId)) {
+      return res.status(400).json({ success: false, message: "A valid paymentId is required" });
+    }
+
+    const payment = await Payment.findById(paymentId).lean();
+    if (!payment) return res.status(404).json({ success: false, message: "Payment not found", code: "PAYMENT_NOT_FOUND" });
+
+    const deal = await Deal.findById(payment.dealId).lean();
+    if (!deal) return res.status(404).json({ success: false, message: "Deal not found", code: "DEAL_NOT_FOUND" });
+
+    const allowed = req.user.role === "admin" ||
+      (req.user.role === "buyer" && String(deal.buyerId) === String(req.user._id)) ||
+      (req.user.role === "seller" && String(deal.sellerId) === String(req.user._id));
+    if (!allowed) return res.status(403).json({ success: false, message: "You are not authorized to view this payment proof", code: "FORBIDDEN" });
+
+    if (!payment.proofFileUrl) {
+      return res.status(404).json({ success: false, message: "Payment screenshot not found", code: "PAYMENT_PROOF_MISSING" });
+    }
+
+    const filename = path.basename(payment.proofFileUrl);
+    const filePath = path.resolve(PAYMENT_UPLOAD_ROOT, filename);
+    if (!filePath.startsWith(`${PAYMENT_UPLOAD_ROOT}${path.sep}`) || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: "Payment screenshot file is no longer available", code: "PAYMENT_PROOF_FILE_MISSING" });
+    }
+
+    return res.sendFile(filePath, {
+      headers: {
+        "Content-Disposition": `inline; filename="${encodeURIComponent(payment.proofFileName || filename)}"`,
+      },
+    });
+  } catch (error) {
+    console.error("Download payment proof error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load payment proof" });
   }
 };
 

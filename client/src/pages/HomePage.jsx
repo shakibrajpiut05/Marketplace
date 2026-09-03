@@ -2,18 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Badge, Button, CreditTypeIcon } from '../components/ui'
 import api from '../services/api.js'
+import { INDIAN_LOCATIONS } from "../constants/indianStates.js";
 
-const STATES = [
-  'Delhi',
-  'Gujarat',
-  'Maharashtra',
-  'Tamil Nadu',
-  'Rajasthan',
-  'Karnataka',
-  'Haryana',
-  'Uttar Pradesh',
-  'Punjab',
-]
 
 const formatDate = (value) => {
   if (!value) return '—'
@@ -243,7 +233,7 @@ function HomePage({ onNavigate }) {
               <label className="text-xs font-medium text-[#6B7280]">Location</label>
               <select className="px-3 py-2 border border-[#E5EAF0] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5AC361] min-w-[140px]" value={filters.location} onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}>
                 <option value="">All States</option>
-                {STATES.map((state) => <option key={state} value={state}>{state}</option>)}
+                {INDIAN_LOCATIONS.map((state) => <option key={state} value={state}>{state}</option>)}
               </select>
             </div>
             <button type="button" className="px-4 py-2 border border-[#E5EAF0] hover:bg-[#F0F4F8] text-[#6B7280] rounded-lg text-sm font-medium transition-colors" onClick={() => setFilters({ type: '', minQty: '', maxQty: '', minPrice: '', maxPrice: '', location: '' })}>Reset</button>
@@ -330,7 +320,7 @@ function HomePage({ onNavigate }) {
               ['Clear Deal States', 'Requests, quotations, payments and disputes are tracked.'],
               ['Confidentiality', 'Direct contact details are not exposed through listings.'],
             ].map(([title, description]) => (
-              <div key={title} className="flex flex-col gap-2"><div className="w-8 h-8 rounded-lg bg-[#5AC361] bg-opacity-20 text-[#5AC361] flex items-center justify-center">✓</div><p className="font-semibold text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{title}</p><p className="text-xs text-[#9CA3AF] leading-relaxed">{description}</p></div>
+              <div key={title} className="flex flex-col gap-2"><div className="w-8 h-8 rounded-lg bg-[#5AC361] bg-opacity-20 text-[#ffffff] flex items-center justify-center">✓</div><p className="font-semibold text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{title}</p><p className="text-xs text-[#9CA3AF] leading-relaxed">{description}</p></div>
             ))}
           </div>
         </div>

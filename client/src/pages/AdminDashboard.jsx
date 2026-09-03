@@ -531,9 +531,32 @@ function VerificationQueue({ kycDocuments, kycLoading, kycError, reviewKyc }) {
 
 function AdminDashboard({ onNavigate }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const validSections = useMemo(() => new Set(["dashboard", "verification", "requests", "quotations", "listings", "deals", "disputes", "messages"]), []);
+  const validSections = useMemo(() => new Set(["dashboard", "verification", "requests", "quotations", "listings", "deals", "disputes", "messages", "reports", "settings"]), []);
   const initialSection = validSections.has(searchParams.get("section")) ? searchParams.get("section") : "dashboard";
-  const [active, setActive] = useState(initialSection);
+  const [active, setActiveState] = useState(initialSection);
+
+  // URL is the single source of truth for dashboard section navigation.
+  // Update state and URL together so polling/rerenders cannot make the UI bounce between sections.
+  const setActive = (section) => {
+    if (!validSections.has(section)) return;
+    setActiveState(section);
+    const next = new URLSearchParams(searchParams);
+    if (section === "dashboard") {
+      next.delete("section");
+      next.delete("deal");
+      next.delete("dealTab");
+    } else {
+      next.set("section", section);
+      if (section !== "deals") {
+        next.delete("deal");
+        next.delete("dealTab");
+      }
+    }
+    const current = searchParams.toString();
+    if (next.toString() !== current) {
+      setSearchParams(next, { replace: true });
+    }
+  };
   const [kycDocuments, setKycDocuments] = useState([]);
   const [kycLoading, setKycLoading] = useState(true);
   const [kycError, setKycError] = useState("");
@@ -548,6 +571,10 @@ function AdminDashboard({ onNavigate }) {
   const [dealError, setDealError] = useState("");
   const [selectedRequestId, setSelectedRequestId] = useState("");
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [paymentReview, setPaymentReview] = useState(null);
+  const [paymentReviewLoading, setPaymentReviewLoading] = useState(false);
+  const [paymentProofUrl, setPaymentProofUrl] = useState("");
+  const [paymentActionLoading, setPaymentActionLoading] = useState(false);
 
   const fetchPurchaseRequests = async ({ silent = false } = {}) => {
     try {
@@ -605,20 +632,9 @@ function AdminDashboard({ onNavigate }) {
 
   useEffect(() => {
     const current = searchParams.get("section");
-    if (active === "dashboard") {
-      if (current) {
-        const next = new URLSearchParams(searchParams);
-        next.delete("section");
-        setSearchParams(next, { replace: true });
-      }
-      return;
-    }
-    if (current !== active) {
-      const next = new URLSearchParams(searchParams);
-      next.set("section", active);
-      setSearchParams(next, { replace: true });
-    }
-  }, [active, searchParams, setSearchParams]);
+    const nextSection = validSections.has(current) ? current : "dashboard";
+    setActiveState((previous) => (previous === nextSection ? previous : nextSection));
+  }, [searchParams, validSections]);
 
   const updateDealStatus = async (dealId, status, paymentStatus) => {
     try {
@@ -638,13 +654,54 @@ function AdminDashboard({ onNavigate }) {
     }
   };
 
+  const openPaymentReview = async (deal) => {
+    try {
+      setPaymentReviewLoading(true);
+      setPaymentProofUrl("");
+      const response = await api.get(`/payments/deal/${deal._id}`);
+      const payment = response.data?.payment;
+      if (!payment) {
+        alert("The buyer has not submitted a payment proof yet.");
+        return;
+      }
+      setPaymentReview({ deal, payment, invoice: response.data?.invoice });
+    } catch (error) {
+      console.error("Payment review load failed:", error);
+      alert(error.response?.data?.message || "Failed to load payment details.");
+    } finally {
+      setPaymentReviewLoading(false);
+    }
+  };
+
+  const viewPaymentProof = async () => {
+    const paymentId = paymentReview?.payment?._id;
+    if (!paymentId) return;
+    try {
+      setPaymentActionLoading(true);
+      const response = await api.get(`/payments/${paymentId}/proof`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: response.headers["content-type"] || "image/*" }));
+      setPaymentProofUrl(url);
+    } catch (error) {
+      console.error("Payment proof load failed:", error);
+      alert(error.response?.data?.message || "Failed to load payment screenshot.");
+    } finally {
+      setPaymentActionLoading(false);
+    }
+  };
+
+  const closePaymentReview = () => {
+    if (paymentProofUrl) window.URL.revokeObjectURL(paymentProofUrl);
+    setPaymentProofUrl("");
+    setPaymentReview(null);
+  };
+
   const confirmPayment = async (deal) => {
     try {
       const paymentResponse = await api.get(`/payments/deal/${deal._id}`);
       const payment = paymentResponse.data?.payment;
 
       if (!payment) {
-        alert("The buyer has not initiated a payment for this deal yet.");
+        alert("The buyer has not submitted a payment proof yet.");
         return;
       }
 
@@ -1810,9 +1867,10 @@ function AdminDashboard({ onNavigate }) {
                           deal.paymentStatus !== "received" && (
                             <Button
                               size="sm"
-                              onClick={() => confirmPayment(deal)}
+                              onClick={() => openPaymentReview(deal)}
+                              disabled={paymentReviewLoading}
                             >
-                              Confirm Payment Received
+                              {paymentReviewLoading ? "Loading…" : "Review Payment Proof"}
                             </Button>
                           )}
 
@@ -1967,6 +2025,43 @@ function AdminDashboard({ onNavigate }) {
           />
         </div>
       )}
+
+      {paymentReview ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[#E5EAF0] px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Payment verification</p>
+                <h3 className="mt-1 text-lg font-semibold text-[#0F1923]">Deal #{paymentReview.deal._id.slice(-6)}</h3>
+                <p className="mt-1 text-xs text-[#667085]">Review the buyer's payment details and screenshot before confirming receipt.</p>
+              </div>
+              <button type="button" onClick={closePaymentReview} className="rounded-lg p-2 text-[#667085] hover:bg-[#F2F4F7]" aria-label="Close payment review">×</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-3"><p className="text-[11px] uppercase tracking-wide text-[#98A2B3]">Amount</p><p className="mt-1 font-semibold text-[#101828]">₹{Number(paymentReview.payment.amount || 0).toLocaleString("en-IN")}</p></div>
+                <div className="rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-3"><p className="text-[11px] uppercase tracking-wide text-[#98A2B3]">Method</p><p className="mt-1 font-semibold capitalize text-[#101828]">{String(paymentReview.payment.method || "—").replaceAll("_", " ")}</p></div>
+                <div className="rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-3 sm:col-span-2"><p className="text-[11px] uppercase tracking-wide text-[#98A2B3]">UTR / Reference</p><p className="mt-1 break-all font-semibold text-[#101828]">{paymentReview.payment.reference || "Not provided"}</p></div>
+              </div>
+              <div className="mt-4 rounded-xl border border-[#E5EAF0] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div><p className="text-sm font-semibold text-[#101828]">Payment screenshot</p><p className="mt-1 text-xs text-[#667085]">{paymentReview.payment.proofFileName || "No screenshot attached"}</p></div>
+                  {paymentReview.payment.proofFileUrl ? <Button size="sm" variant="outline" onClick={viewPaymentProof} disabled={paymentActionLoading}>{paymentActionLoading ? "Loading…" : paymentProofUrl ? "Reload screenshot" : "View screenshot"}</Button> : null}
+                </div>
+                {paymentProofUrl ? <div className="mt-4 overflow-hidden rounded-xl border border-[#E5EAF0] bg-[#F7F9FB] p-2"><img src={paymentProofUrl} alt="Payment proof" className="mx-auto max-h-[420px] max-w-full rounded-lg object-contain" /></div> : null}
+              </div>
+              <div className="mt-4 rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-4">
+                <p className="text-sm font-semibold text-[#101828]">Buyer note</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-[#667085]">{paymentReview.payment.notes || "No note provided."}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-[#E5EAF0] px-5 py-4">
+              <Button size="sm" variant="outline" onClick={closePaymentReview}>Close</Button>
+              {paymentReview.payment.status !== "received" ? <Button size="sm" onClick={async () => { await confirmPayment(paymentReview.deal); closePaymentReview(); }}>Verify Payment Received</Button> : <Badge label="Payment verified" />}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {active === "settings" && (
         <div className="flex flex-col items-center justify-center py-24 text-center">

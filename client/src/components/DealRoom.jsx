@@ -17,7 +17,7 @@ function DealRoomWorkflowHeader({ activeTab, status }) {
 
   return (
     <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <DealRoomWorkflowHeader activeTab={activeTab} status={deal?.status} />
+        
 
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
@@ -79,7 +79,7 @@ const stages = [
 function Progress({ status }) {
   if (status === "cancelled") {
     return (
-      <div className="rounded-xl border border-[#FECACA] bg-[#FFF7F7] p-4">
+      <div className="rounded-2xl border border-[#FECACA] bg-[#FFF7F7] p-5 sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#B42318]">
           Deal cancelled
         </p>
@@ -93,7 +93,7 @@ function Progress({ status }) {
   const currentIndex = stages.findIndex((stage) => stage.key === status);
 
   return (
-    <div className="rounded-xl border border-[#E5EAF0] bg-[#F7F9FB] p-4">
+    <div className="rounded-2xl border border-[#E4E9EE] bg-white p-5 shadow-sm sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">
         Deal progress
       </p>
@@ -174,8 +174,8 @@ function MessageThread({ dealId, role }) {
   };
 
   return (
-    <div className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-[#E5EAF0]">
-      <div className="flex-1 space-y-3 overflow-y-auto bg-[#F7F9FB] p-4">
+    <div className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-[#E4E9EE] bg-white shadow-sm">
+      <div className="flex-1 space-y-4 overflow-y-auto bg-[#F7F9FB] p-4 sm:p-6">
         {loading ? (
           <div className="flex min-h-[280px] items-center justify-center text-sm text-[#98A2B3]">
             Loading conversation…
@@ -210,7 +210,7 @@ function MessageThread({ dealId, role }) {
                 className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[86%] rounded-2xl px-4 py-3 ${
+                  className={`max-w-[88%] rounded-2xl px-4 py-3.5 shadow-sm sm:max-w-[78%] ${
                     mine
                       ? "bg-[#5AC361] text-white"
                       : "border border-[#E5EAF0] bg-white text-[#344054]"
@@ -237,7 +237,7 @@ function MessageThread({ dealId, role }) {
         )}
       </div>
 
-      <div className="border-t border-[#E5EAF0] bg-white p-4">
+      <div className="border-t border-[#E5EAF0] bg-white p-4 sm:p-5">
         {error ? <p className="mb-2 text-xs text-[#B42318]">{error}</p> : null}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <Textarea
@@ -269,6 +269,7 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
   const [method, setMethod] = useState("bank_transfer");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
+  const [proofFile, setProofFile] = useState(null);
 
   const loadPayment = async () => {
     try {
@@ -292,19 +293,29 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
 
   const initiate = async () => {
     if (actionLoading) return;
+    if (!reference.trim()) {
+      setError("Please enter the UTR / transaction reference.");
+      return;
+    }
+    if (!proofFile) {
+      setError("Please upload your payment screenshot.");
+      return;
+    }
     try {
       setActionLoading(true);
       setError("");
-      const response = await api.post(`/payments/deal/${deal._id}/initiate`, {
-        method,
-        reference: reference.trim(),
-        notes: notes.trim(),
-      });
+      const formData = new FormData();
+      formData.append("method", method);
+      formData.append("reference", reference.trim());
+      formData.append("notes", notes.trim());
+      formData.append("paymentProof", proofFile);
+      const response = await api.post(`/payments/deal/${deal._id}/initiate`, formData);
       setPayment(response.data?.payment || null);
       setInvoice(response.data?.invoice || null);
+      setProofFile(null);
       onDealUpdate?.(response.data?.deal);
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to initiate payment.");
+      setError(err.response?.data?.message || "Unable to submit payment proof.");
     } finally {
       setActionLoading(false);
     }
@@ -368,7 +379,7 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {error ? (
         <Card className="border-[#FECACA] bg-[#FFF7F7]">
           <p className="text-sm font-medium text-[#991B1B]">{error}</p>
@@ -383,7 +394,7 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
         </Card>
       ) : null}
 
-      <Card>
+      <Card className="rounded-2xl border-[#E4E9EE] p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">
@@ -416,7 +427,7 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
       </Card>
 
       {canInitiate ? (
-        <Card>
+        <Card className="rounded-2xl border-[#E4E9EE] p-5 shadow-sm sm:p-6">
           <p className="text-sm font-semibold text-[#101828]">
             Initiate payment
           </p>
@@ -456,32 +467,56 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
             className="mt-4"
             placeholder="Add any payment coordination note…"
           />
+          <div className="mt-4 rounded-xl border border-dashed border-[#C9D3DD] bg-[#F8FAFC] p-4">
+            <label className="block text-sm font-semibold text-[#344054]">
+              Payment screenshot <span className="text-[#B42318]">*</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setProofFile(file);
+                  if (file) setError("");
+                }}
+                className="mt-2 block w-full cursor-pointer rounded-lg border border-[#DCE3EA] bg-white px-3 py-2 text-sm font-normal text-[#475467] file:mr-3 file:rounded-md file:border-0 file:bg-[#EBF8EC] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#2E7D32]"
+              />
+            </label>
+            <p className="mt-2 text-[11px] text-[#98A2B3]">Upload the screenshot showing the successful payment. PNG, JPG or WEBP · max 10 MB.</p>
+            {proofFile ? (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-[#CFE8D1] bg-white px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-[#344054]">{proofFile.name}</p>
+                  <p className="text-[10px] text-[#98A2B3]">{(proofFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+                <button type="button" className="text-xs font-semibold text-[#B42318]" onClick={() => setProofFile(null)}>Remove</button>
+              </div>
+            ) : null}
+          </div>
           <div className="mt-4 flex justify-end">
-            <Button onClick={initiate} disabled={actionLoading}>
+            <Button onClick={initiate} disabled={actionLoading || !proofFile || !reference.trim()}>
               {actionLoading
-                ? "Initiating…"
+                ? "Submitting…"
                 : status === "failed"
-                  ? "Retry payment"
-                  : "Initiate payment"}
+                  ? "Submit payment proof"
+                  : "Submit payment proof"}
             </Button>
           </div>
         </Card>
       ) : null}
 
       {status === "initiated" ? (
-        <Card className="border-[#FED7AA] bg-[#FFFAF5]">
+        <Card className="rounded-2xl border-[#FED7AA] bg-[#FFFAF5] p-5 shadow-sm sm:p-6">
           <p className="text-sm font-semibold text-[#92400E]">
-            Payment is awaiting confirmation
+            Payment proof submitted — awaiting admin verification
           </p>
           <p className="mt-1 text-sm leading-6 text-[#7C5A2E]">
-            Keep your transaction reference available. EPR Nexus will confirm
-            the payment after verification.
+            Your UTR and payment screenshot have been sent to EPR Nexus for verification.
           </p>
         </Card>
       ) : null}
 
       {invoice ? (
-        <Card>
+        <Card className="rounded-2xl border-[#E4E9EE] p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">
@@ -502,12 +537,12 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
             </div>
           </div>
           <div className="mt-5 overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-[#E5EAF0] text-left text-xs uppercase tracking-wide text-[#98A2B3]">
-                  <th className="px-3 py-3">Description</th>
-                  <th className="px-3 py-3">Qty</th>
-                  <th className="px-3 py-3">Unit price</th>
+                  <th className="px-4 py-3.5">Description</th>
+                  <th className="px-4 py-3.5">Qty</th>
+                  <th className="px-4 py-3.5">Unit price</th>
                   <th className="px-3 py-3 text-right">Amount</th>
                 </tr>
               </thead>
@@ -517,16 +552,16 @@ function PaymentPanel({ deal, role, onDealUpdate }) {
                     key={`${item.description}-${index}`}
                     className="border-b border-[#F0F2F5]"
                   >
-                    <td className="px-3 py-3 text-[#344054]">
+                    <td className="px-4 py-3.5 text-[#344054]">
                       {item.description}
                     </td>
-                    <td className="px-3 py-3 text-[#667085]">
+                    <td className="px-4 py-3.5 text-[#667085]">
                       {item.quantity}
                     </td>
-                    <td className="px-3 py-3 text-[#667085]">
+                    <td className="px-4 py-3.5 text-[#667085]">
                       {money(item.unitPrice)}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold text-[#344054]">
+                    <td className="px-4 py-3.5 text-right font-semibold text-[#344054]">
                       {money(item.amount)}
                     </td>
                   </tr>
@@ -619,7 +654,7 @@ function ReviewPanel({ deal, role }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card className="rounded-2xl border-[#E4E9EE] p-5 shadow-sm sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Your review</p>
         {saved ? (
           <div className="mt-3 rounded-xl border border-[#CFE8D1] bg-[#F5FBF6] p-4">
@@ -643,8 +678,8 @@ function ReviewPanel({ deal, role }) {
         )}
       </Card>
 
-      <Card>
-        <div className="flex items-center justify-between">
+      <Card className="rounded-2xl border-[#E4E9EE] p-5 shadow-sm sm:p-6">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">Deal reviews</p>
             <p className="mt-1 text-sm text-[#667085]">Feedback left by the participants in this deal.</p>
@@ -654,7 +689,7 @@ function ReviewPanel({ deal, role }) {
         {loading ? <p className="mt-5 text-sm text-[#98A2B3]">Loading reviews…</p> : reviews.length === 0 ? <p className="mt-5 text-sm text-[#98A2B3]">No reviews have been submitted yet.</p> : (
           <div className="mt-4 space-y-3">
             {reviews.map((item) => (
-              <div key={item._id} className="rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-4">
+              <div key={item._id} className="rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-[#344054]">{item.reviewerId?.company || item.reviewerId?.name || "Participant"}</p>
@@ -773,7 +808,7 @@ export function DealRoom({
       { id: "dispute", label: "Dispute" },
       ...(deal?.status === "completed" ? [{ id: "review", label: "Review" }] : []),
     ],
-    [],
+    [currentDeal?.status],
   );
 
   if (!currentDeal) return null;
@@ -785,13 +820,13 @@ export function DealRoom({
       </Button>
 
       {open ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-3 sm:p-5">
-          <div className="flex h-[min(820px,94vh)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="shrink-0 border-b border-[#E5EAF0] px-5 py-4 sm:px-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0F172A]/55 p-3 sm:p-6">
+          <div className="flex h-[min(860px,94vh)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-white/60 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+            <div className="shrink-0 border-b border-[#E7EBEF] bg-white px-5 py-5 sm:px-8 sm:py-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-heading truncate text-lg font-semibold text-[#0F1923]">
+                    <p className="font-heading truncate text-xl font-semibold tracking-[-0.02em] text-[#0F1923] sm:text-2xl">
                       {title}
                     </p>
                     <Badge
@@ -808,7 +843,7 @@ export function DealRoom({
                       }
                     />
                   </div>
-                  <p className="mt-1 text-xs text-[#667085]">
+                  <p className="mt-2 text-xs leading-5 text-[#667085] sm:text-sm">
                     Deal #{String(currentDeal._id).slice(-8)} ·{" "}
                     {currentDeal.quantity || 0} MT · {counterpart}
                   </p>
@@ -816,39 +851,83 @@ export function DealRoom({
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="rounded-lg p-2 text-[#667085] hover:bg-[#F2F4F7]"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#E5EAF0] bg-white text-xl leading-none text-[#667085] transition hover:border-[#CFE8D1] hover:bg-[#F5FBF6] hover:text-[#2E7D32]"
                   aria-label="Close deal room"
                 >
                   ×
                 </button>
               </div>
 
-              <div className="mt-4 flex gap-1 overflow-x-auto">
-                {tabs.map((item) => (
+              <nav
+                aria-label="Deal Room navigation"
+                className="mt-5 overflow-x-auto rounded-2xl border border-[#E4E9EE] bg-[#F8FAFC] p-1.5"
+              >
+                <div className="flex min-w-max gap-1">
+                  {tabs.map((item, index) => {
+                    const activeIndex = tabs.findIndex((entry) => entry.id === tab);
+                    const completedStep = index < activeIndex;
+                    const paymentStep = item.id === "payment";
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleTabChange(item.id)}
+                        className={`group flex min-h-11 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap transition sm:min-w-[138px] ${
+                          tab === item.id
+                            ? "bg-white text-[#2E7D32] shadow-sm ring-1 ring-[#CFE8D1]"
+                            : "text-[#667085] hover:bg-white hover:text-[#344054]"
+                        }`}
+                        aria-current={tab === item.id ? "page" : undefined}
+                      >
+                        <span
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                            tab === item.id
+                              ? "bg-[#5AC361] text-white"
+                              : completedStep
+                                ? "bg-[#EAF7EC] text-[#2E7D32]"
+                                : "bg-[#E9EEF3] text-[#667085]"
+                          }`}
+                        >
+                          {completedStep ? "✓" : index + 1}
+                        </span>
+                        <span>{item.label}</span>
+                        {paymentStep && currentDeal.status !== "completed" ? (
+                          <span className="rounded-full bg-[#FFF4D6] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#9A6700]">
+                            Next
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </nav>
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1">
+                <p className="text-[11px] text-[#98A2B3]">
+                  {tab === "payment"
+                    ? "Payment & Invoice is the next action for this transaction."
+                    : "Use the navigation above to move through the deal."}
+                </p>
+                {tab !== "payment" && currentDeal.status === "terms_agreed" && role === "buyer" ? (
                   <button
-                    key={item.id}
                     type="button"
-                    onClick={() => handleTabChange(item.id)}
-                    className={`rounded-lg px-3.5 py-2 text-sm font-semibold whitespace-nowrap ${
-                      tab === item.id
-                        ? "bg-[#F0FBF1] text-[#2E7D32]"
-                        : "text-[#667085] hover:bg-[#F7F9FB]"
-                    }`}
+                    onClick={() => handleTabChange("payment")}
+                    className="inline-flex min-h-9 items-center rounded-lg bg-[#5AC361] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#4CAF50]"
                   >
-                    {item.label}
+                    Continue to Payment & Invoice →
                   </button>
-                ))}
+                ) : null}
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-[#FBFCFD] p-4 sm:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#F7F9FB] p-4 sm:p-7 lg:p-8">
               {tab === "overview" ? (
                 <div className="space-y-5">
                   <Progress status={currentDeal.status} />
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Card>
-                      <div className="mb-4 flex items-center justify-between">
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Card className="rounded-2xl border-[#E4E9EE] bg-white p-5 shadow-sm sm:p-6">
+                      <div className="mb-5 flex items-center justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">
                             Commercial terms
@@ -893,7 +972,7 @@ export function DealRoom({
                       </div>
                     </Card>
 
-                    <Card>
+                    <Card className="rounded-2xl border-[#E4E9EE] bg-white p-5 shadow-sm sm:p-6">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#98A2B3]">
                         Credit
                       </p>
@@ -931,7 +1010,7 @@ export function DealRoom({
                     </Card>
                   </div>
 
-                  <Card className="border-[#CFE8D1] bg-[#F5FBF6]">
+                  <Card className="rounded-2xl border-[#CFE8D1] bg-[#F5FBF6] p-5 shadow-sm sm:p-6">
                     <p className="text-sm font-semibold text-[#1F6B2A]">
                       Transaction coordination
                     </p>
@@ -966,7 +1045,7 @@ export function DealRoom({
               ) : tab === "review" ? (
                 <ReviewPanel deal={currentDeal} role={role} />
               ) : (
-                <div className="mx-auto max-w-2xl">
+                <div className="mx-auto w-full max-w-3xl">
                   {requestLoading ? (
                     <Card>
                       <div className="py-16 text-center text-sm text-[#98A2B3]">
@@ -1033,7 +1112,7 @@ export function DealRoom({
 
 function Metric({ label, value }) {
   return (
-    <div className="rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] p-3">
+    <div className="min-w-0 rounded-xl border border-[#E5EAF0] bg-[#F8FAFC] px-4 py-3.5">
       <p className="text-[11px] text-[#98A2B3]">{label}</p>
       <p className="mt-1 text-sm font-semibold text-[#344054]">{value}</p>
     </div>
